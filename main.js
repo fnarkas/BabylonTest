@@ -12,6 +12,7 @@ class EarthGlobe {
         this.earthSphere = null;
         this.earthTexture = null;
         this.countryMeshes = [];
+        this.borderLines = [];
         this.showCountries = false;
         this.frameCount = 0;
 
@@ -36,6 +37,7 @@ class EarthGlobe {
         this.camera.lowerRadiusLimit = 3;
         this.camera.upperRadiusLimit = 20;
         this.camera.wheelPrecision = 50;
+        this.camera.minZ = 0.01; // Adjust near clipping plane
 
         // Create light
         const light = new BABYLON.HemisphericLight(
@@ -108,7 +110,7 @@ class EarthGlobe {
         return indices;
     }
 
-    createCountryMesh(latLonPoints, altitude = 0.05) {
+    createCountryMesh(latLonPoints, altitude = 0.08) {
         if (latLonPoints.length < 3) {
             console.error("Not enough points to create mesh");
             return null;
@@ -192,6 +194,46 @@ class EarthGlobe {
         return { r, g, b };
     }
 
+    createCountryBorderLines(latLonPoints, altitude = 0.09) {
+        try {
+            // Convert lat/lon points to 3D sphere coordinates
+            const points3D = [];
+
+            for (const point of latLonPoints) {
+                const vertex = this.latLonToSphere(point.lat, point.lon, altitude);
+                points3D.push(vertex);
+            }
+
+            // Close the loop by adding the first point at the end
+            if (points3D.length > 0) {
+                points3D.push(points3D[0]);
+            }
+
+            // Create tube along the path for visible thickness
+            const tube = BABYLON.MeshBuilder.CreateTube(
+                "borderLine",
+                {
+                    path: points3D,
+                    radius: 0.002,  // Tube thickness
+                    tessellation: 8,
+                    cap: BABYLON.Mesh.CAP_ALL
+                },
+                this.scene
+            );
+
+            // Create unlit white material for the border (not affected by light)
+            const material = new BABYLON.StandardMaterial("borderMat", this.scene);
+            material.emissiveColor = new BABYLON.Color3(1, 1, 1); // Full brightness white
+            material.disableLighting = true; // Unlit shader
+            tube.material = material;
+
+            return tube;
+        } catch (error) {
+            console.error("Error creating border lines:", error);
+            return null;
+        }
+    }
+
     addCountry(coordinates) {
         if (this.countryMeshes.length >= MAX_COUNTRIES) {
             console.error("Max countries reached");
@@ -207,11 +249,18 @@ class EarthGlobe {
             });
         }
 
-        const mesh = this.createCountryMesh(latLonPoints, 0.05);
+        const mesh = this.createCountryMesh(latLonPoints, 0.08);
 
         if (mesh) {
             this.countryMeshes.push(mesh);
             this.showCountries = true;
+
+            // Create border lines for this country
+            const borderLines = this.createCountryBorderLines(latLonPoints, 0.09);
+            if (borderLines) {
+                this.borderLines.push(borderLines);
+            }
+
             console.log("Country added successfully. Total:", this.countryMeshes.length);
         }
     }
