@@ -406,7 +406,9 @@ class EarthGlobe {
             const countryData = {
                 mesh: mesh,
                 borderLine: borderLine,
-                extrudedBorder: extrudedBorder
+                extrudedBorder: extrudedBorder,
+                borderPoints: latLonPoints, // Store border points for neighbor detection
+                neighbour_indices: [] // Will be populated after all countries are loaded
             };
             this.countriesData.push(countryData);
 
@@ -470,10 +472,73 @@ class EarthGlobe {
             }
 
             console.log('Added', addedCount, 'countries');
+
+            // Detect neighbors after all countries are loaded
+            this.detectNeighbors();
+
             document.getElementById('status').style.display = 'block';
         } catch (error) {
             console.error('Failed to load countries.json:', error);
         }
+    }
+
+    detectNeighbors() {
+        console.log('Detecting neighbors...');
+        const startTime = performance.now();
+
+        // For each country, check all other countries for shared border points
+        for (let i = 0; i < this.countriesData.length; i++) {
+            const country1 = this.countriesData[i];
+            if (!country1.borderPoints) continue;
+
+            for (let j = i + 1; j < this.countriesData.length; j++) {
+                const country2 = this.countriesData[j];
+                if (!country2.borderPoints) continue;
+
+                // Check if countries share any border points
+                const areNeighbors = this.sharesBorderPoint(country1.borderPoints, country2.borderPoints);
+
+                if (areNeighbors) {
+                    country1.neighbour_indices.push(j);
+                    country2.neighbour_indices.push(i);
+                }
+            }
+        }
+
+        const endTime = performance.now();
+        console.log(`Neighbor detection completed in ${(endTime - startTime).toFixed(2)}ms`);
+
+        // Log statistics
+        let totalNeighbors = 0;
+        let maxNeighbors = 0;
+        for (const country of this.countriesData) {
+            totalNeighbors += country.neighbour_indices.length;
+            maxNeighbors = Math.max(maxNeighbors, country.neighbour_indices.length);
+        }
+        console.log(`Total neighbor relationships: ${totalNeighbors / 2}`); // Divide by 2 since each relationship is counted twice
+        console.log(`Max neighbors for a single country: ${maxNeighbors}`);
+
+        // Make data available globally for testing
+        window.earthGlobe = this;
+    }
+
+    sharesBorderPoint(points1, points2) {
+        // Check if two countries share any border point
+        // Using a small epsilon for floating point comparison
+        const epsilon = 0.0001;
+
+        for (const p1 of points1) {
+            for (const p2 of points2) {
+                const latDiff = Math.abs(p1.lat - p2.lat);
+                const lonDiff = Math.abs(p1.lon - p2.lon);
+
+                if (latDiff < epsilon && lonDiff < epsilon) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     update() {
