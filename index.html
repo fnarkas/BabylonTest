@@ -60,6 +60,30 @@
             height: 10px;
             z-index: 100;
         }
+
+        #controls {
+            position: absolute;
+            top: 130px;
+            left: 10px;
+            color: #333;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+
+        #controls label {
+            display: block;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+
+        #controls input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
     </style>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/earcut@2.2.4/dist/earcut.min.js"></script>
@@ -69,6 +93,16 @@
     <div id="info">Drag with mouse to rotate camera</div>
     <div id="fps">FPS: 0</div>
     <div id="status"></div>
+    <div id="controls">
+        <label>
+            <input type="checkbox" id="tubeBordersToggle" checked>
+            Tube Borders
+        </label>
+        <label>
+            <input type="checkbox" id="extrudedBordersToggle" checked>
+            Extruded Borders
+        </label>
+    </div>
 
     <script src="main.js"></script>
 </body>

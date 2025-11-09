@@ -67,6 +67,9 @@ class EarthGlobe {
             this.engine.resize();
         });
 
+        // Setup border toggle controls
+        this.setupBorderToggles();
+
         // Load countries
         this.loadCountries();
     }
@@ -85,6 +88,26 @@ class EarthGlobe {
         material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
 
         this.earthSphere.material = material;
+    }
+
+    setupBorderToggles() {
+        // Tube borders toggle
+        const tubeBordersToggle = document.getElementById('tubeBordersToggle');
+        tubeBordersToggle.addEventListener('change', (e) => {
+            const isVisible = e.target.checked;
+            for (const border of this.borderLines) {
+                border.setEnabled(isVisible);
+            }
+        });
+
+        // Extruded borders toggle
+        const extrudedBordersToggle = document.getElementById('extrudedBordersToggle');
+        extrudedBordersToggle.addEventListener('change', (e) => {
+            const isVisible = e.target.checked;
+            for (const border of this.extrudedBorders) {
+                border.setEnabled(isVisible);
+            }
+        });
     }
 
     latLonToSphere(lat, lon, altitude = 0) {
