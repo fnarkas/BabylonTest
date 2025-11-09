@@ -11,9 +11,7 @@ class EarthGlobe {
         this.camera = null;
         this.earthSphere = null;
         this.earthTexture = null;
-        this.countryMeshes = [];
-        this.borderLines = [];
-        this.extrudedBorders = [];
+        this.countriesData = []; // Each entry: { mesh, borderLine, extrudedBorder }
         this.showCountries = false;
         this.frameCount = 0;
 
@@ -95,8 +93,10 @@ class EarthGlobe {
         const tubeBordersToggle = document.getElementById('tubeBordersToggle');
         tubeBordersToggle.addEventListener('change', (e) => {
             const isVisible = e.target.checked;
-            for (const border of this.borderLines) {
-                border.setEnabled(isVisible);
+            for (const countryData of this.countriesData) {
+                if (countryData.borderLine) {
+                    countryData.borderLine.setEnabled(isVisible);
+                }
             }
         });
 
@@ -104,8 +104,10 @@ class EarthGlobe {
         const extrudedBordersToggle = document.getElementById('extrudedBordersToggle');
         extrudedBordersToggle.addEventListener('change', (e) => {
             const isVisible = e.target.checked;
-            for (const border of this.extrudedBorders) {
-                border.setEnabled(isVisible);
+            for (const countryData of this.countriesData) {
+                if (countryData.extrudedBorder) {
+                    countryData.extrudedBorder.setEnabled(isVisible);
+                }
             }
         });
     }
@@ -188,7 +190,7 @@ class EarthGlobe {
 
             // Create material with varying colors
             const material = new BABYLON.StandardMaterial("countryMat", this.scene);
-            const hue = (this.countryMeshes.length % 360) / 360;
+            const hue = (this.countriesData.length % 360) / 360;
             const color = this.hsvToRgb(hue, 0.7, 0.9);
             material.diffuseColor = new BABYLON.Color3(color.r, color.g, color.b);
             material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
@@ -375,7 +377,7 @@ class EarthGlobe {
     }
 
     addCountry(coordinates) {
-        if (this.countryMeshes.length >= MAX_COUNTRIES) {
+        if (this.countriesData.length >= MAX_COUNTRIES) {
             console.error("Max countries reached");
             return;
         }
@@ -392,22 +394,23 @@ class EarthGlobe {
         const mesh = this.createCountryMesh(latLonPoints, 0.08);
 
         if (mesh) {
-            this.countryMeshes.push(mesh);
             this.showCountries = true;
 
             // Create border lines (tubes) for this country
-            const borderLines = this.createCountryBorderLines(latLonPoints, 0.09);
-            if (borderLines) {
-                this.borderLines.push(borderLines);
-            }
+            const borderLine = this.createCountryBorderLines(latLonPoints, 0.09);
 
             // Create extruded border walls for this country
             const extrudedBorder = this.createExtrudedBorder(latLonPoints, 0.08);
-            if (extrudedBorder) {
-                this.extrudedBorders.push(extrudedBorder);
-            }
 
-            console.log("Country added successfully. Total:", this.countryMeshes.length);
+            // Store all country data together
+            const countryData = {
+                mesh: mesh,
+                borderLine: borderLine,
+                extrudedBorder: extrudedBorder
+            };
+            this.countriesData.push(countryData);
+
+            console.log("Country added successfully. Total:", this.countriesData.length);
         }
     }
 
