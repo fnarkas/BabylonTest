@@ -81,6 +81,9 @@ class EarthGlobe {
     private sceneInstrumentation: BABYLON.SceneInstrumentation;
     private bossPinTemplate: BABYLON.AbstractMesh | null;
     private placedPins: BABYLON.AbstractMesh[];
+    private previewPin: BABYLON.TransformNode | null;
+    private isPlacingMode: boolean;
+    private pinButton: HTMLElement | null;
 
     constructor() {
         this.canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -106,6 +109,9 @@ class EarthGlobe {
         this.frameCount = 0;
         this.bossPinTemplate = null;
         this.placedPins = [];
+        this.previewPin = null;
+        this.isPlacingMode = false;
+        this.pinButton = null;
 
         // Initialize scene instrumentation for accurate performance metrics
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -158,11 +164,13 @@ class EarthGlobe {
         // Load countries
         this.loadCountries();
 
-        // Load BossPin model
-        this.loadBossPinModel();
+        // Load BossPin model and create preview pin
+        this.loadBossPinModel().then(() => {
+            this.createPreviewPin();
+        });
 
-        // Setup click handler
-        this.setupClickHandler();
+        // Setup drag-and-drop pin placement
+        this.setupPinDragAndDrop();
     }
 
     private createEarthSphere(): void {
@@ -1050,56 +1058,103 @@ class EarthGlobe {
         }
     }
 
-    private setupClickHandler(): void {
-        this.scene.onPointerDown = (evt, pickResult) => {
-            if (pickResult.hit && pickResult.pickedPoint && this.bossPinTemplate) {
-                this.placePinAtPoint(pickResult.pickedPoint);
+    private setupPinDragAndDrop(): void {
+        // Get the pin button element
+        this.pinButton = document.getElementById('pinButton');
+        if (!this.pinButton) return;
+
+        // Handle mousedown on pin button - enter placing mode
+        this.pinButton.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            this.enterPlacingMode();
+        });
+
+        // Handle mousemove on canvas - update preview pin position
+        this.canvas.addEventListener('mousemove', (e) => {
+            if (this.isPlacingMode && this.previewPin) {
+                this.updatePreviewPinPosition(e);
             }
-        };
+        });
+
+        // Handle mouseup - place pin and exit placing mode
+        this.canvas.addEventListener('mouseup', (e) => {
+            if (this.isPlacingMode) {
+                this.exitPlacingMode(true); // true = place the pin
+            }
+        });
+
+        // Handle mouse leaving canvas - cancel placing mode
+        this.canvas.addEventListener('mouseleave', (e) => {
+            if (this.isPlacingMode) {
+                this.exitPlacingMode(false); // false = don't place the pin
+            }
+        });
     }
 
-    private placePinAtPoint(point: BABYLON.Vector3): void {
-        if (!this.bossPinTemplate) {
-            console.warn('BossPin template not loaded yet');
-            return;
+    private enterPlacingMode(): void {
+        if (!this.previewPin) return;
+
+        this.isPlacingMode = true;
+
+        // Hide the pin button
+        if (this.pinButton) {
+            this.pinButton.style.display = 'none';
         }
 
-        // Clone all meshes in the hierarchy manually
+        // Disable camera controls
+        this.camera.detachControl();
+
+        // Don't show preview pin yet - wait until mouse is over globe
+        // It will be shown by updatePreviewPinPosition when it hits the globe
+
+        console.log('Entered placing mode');
+    }
+
+    private exitPlacingMode(placePin: boolean): void {
+        this.isPlacingMode = false;
+
+        // Show the pin button
+        if (this.pinButton) {
+            this.pinButton.style.display = 'block';
+        }
+
+        // Re-enable camera controls
+        this.camera.attachControl(this.canvas, true);
+
+        // Always hide preview pin when exiting placing mode (going back to navigation)
+        if (this.previewPin) {
+            this.previewPin.setEnabled(false);
+        }
+
+        if (placePin) {
+            console.log('Pin placed at current position');
+        } else {
+            console.log('Pin placement cancelled');
+        }
+
+        console.log('Exited placing mode');
+    }
+
+    private createPreviewPin(): void {
+        if (!this.bossPinTemplate) return;
+
         const clonedMeshes: BABYLON.AbstractMesh[] = [];
         const originalChildren = this.bossPinTemplate.getChildMeshes();
 
-        // Calculate surface normal (direction from globe center to click point)
-        // On a sphere, the normal at any surface point is simply the normalized position vector
-        const normal = point.normalize();
-
-        // Position on globe surface (pivot point at the base of the pin)
-        const pivotPosition = normal.scale(EARTH_RADIUS);
-
-        // Create parent transform node at the pivot point (base of pin)
-        const pinPivot = new BABYLON.TransformNode("pinPivot_" + Date.now(), this.scene);
-        pinPivot.position = pivotPosition;
-
-        // Orient the pivot so its local Y-axis points along the normal (outward from globe)
-        // Use quaternion rotation to align local Y-axis with the normal vector
-        const defaultUp = BABYLON.Vector3.Up(); // Local Y-axis (0, 1, 0)
-        const rotationQuat = BABYLON.Quaternion.FromUnitVectorsToRef(
-            defaultUp,
-            normal,
-            new BABYLON.Quaternion()
-        );
-        pinPivot.rotationQuaternion = rotationQuat;
+        // Create parent transform node for preview
+        const pinPivot = new BABYLON.TransformNode("previewPinPivot", this.scene);
 
         // Create pin container as child of pivot
-        const pinContainer = new BABYLON.TransformNode("pin_" + Date.now(), this.scene);
+        const pinContainer = new BABYLON.TransformNode("previewPin", this.scene);
         pinContainer.parent = pinPivot;
 
-        // Scale the pin significantly (model is very small - about 0.015 units)
-        const pinScale = 150; // 5x bigger than before (30 * 5 = 150)
+        // Scale the pin
+        const pinScale = 150;
         pinContainer.scaling = new BABYLON.Vector3(pinScale, pinScale, pinScale);
 
         // Clone each child mesh and apply unlit shader
         originalChildren.forEach(child => {
-            const clonedChild = child.clone(child.name + "_clone", pinContainer);
+            const clonedChild = child.clone(child.name + "_preview", pinContainer);
             if (clonedChild) {
                 clonedChild.setEnabled(true);
                 clonedMeshes.push(clonedChild);
@@ -1107,20 +1162,52 @@ class EarthGlobe {
                 // Apply unlit shader to make it bright
                 const unlitMaterial = this.createUnlitMaterial(child.material);
                 clonedChild.material = unlitMaterial;
-
-                console.log('Cloned child mesh:', clonedChild.name, 'vertices:', clonedChild.getTotalVertices());
             }
         });
 
-        console.log('Pin created with', clonedMeshes.length, 'child meshes');
+        this.previewPin = pinPivot;
 
-        this.placedPins.push(pinPivot as any);
+        // Hide the preview pin initially (only show during placing mode)
+        this.previewPin.setEnabled(false);
 
-        console.log(`Placed pin at ${pivotPosition.toString()}, scale: ${pinScale}`);
-        console.log('Pin has', pinContainer.getChildMeshes().length, 'child meshes');
-        console.log('Total placed pins:', this.placedPins.length);
-        console.log('Scene total meshes:', this.scene.meshes.length);
+        console.log('Preview pin created and hidden');
     }
+
+    private updatePreviewPinPosition(event: MouseEvent): void {
+        if (!this.previewPin) return;
+
+        // Get picking ray from mouse position
+        const pickResult = this.scene.pick(event.clientX, event.clientY);
+
+        if (pickResult.hit && pickResult.pickedPoint) {
+            // Show the pin when we hit the globe
+            if (!this.previewPin.isEnabled()) {
+                this.previewPin.setEnabled(true);
+            }
+
+            // Calculate surface normal
+            const normal = pickResult.pickedPoint.normalize();
+
+            // Position on globe surface
+            const pivotPosition = normal.scale(EARTH_RADIUS);
+            this.previewPin.position = pivotPosition;
+
+            // Orient the pivot so its local Y-axis points along the normal
+            const defaultUp = BABYLON.Vector3.Up();
+            const rotationQuat = BABYLON.Quaternion.FromUnitVectorsToRef(
+                defaultUp,
+                normal,
+                new BABYLON.Quaternion()
+            );
+            this.previewPin.rotationQuaternion = rotationQuat;
+        } else {
+            // Hide the pin when not over the globe
+            if (this.previewPin.isEnabled()) {
+                this.previewPin.setEnabled(false);
+            }
+        }
+    }
+
 }
 
 // Initialize the application when page loads
