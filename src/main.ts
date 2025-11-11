@@ -2,6 +2,11 @@
 import * as BABYLON from '@babylonjs/core';
 import earcut from 'earcut';
 
+// Import shaders
+import animatedVertexShader from './shaders/animated.vertex.glsl?raw';
+import borderFragmentShader from './shaders/border.fragment.glsl?raw';
+import countryFragmentShader from './shaders/country.fragment.glsl?raw';
+
 // Constants
 const EARTH_RADIUS = 2.0;
 const MAX_COUNTRIES = 5000;
@@ -698,114 +703,79 @@ class EarthGlobe {
         this.animationTexture.update();
     }
 
-    // Shared vertex shader - used by all animated meshes
-    private createAnimatedVertexShader(name: string, varyings: string = ""): void {
-        BABYLON.Effect.ShadersStore[`${name}VertexShader`] = `
-            precision highp float;
+    private showShaderError(shaderName: string, error: any): void {
+        const toast = document.getElementById('error-toast');
+        const message = document.getElementById('error-message');
 
-            // Attributes
-            attribute vec3 position;
-            attribute vec3 normal;
-            attribute float countryIndex;
+        if (toast && message) {
+            message.textContent = `Shader: ${shaderName}\n\n${error.message || error}`;
+            toast.classList.add('show');
+            console.error(`Shader compilation error in ${shaderName}:`, error);
+        }
+    }
 
-            // Uniforms
-            uniform mat4 worldViewProjection;
-            uniform mat4 world;
-            uniform sampler2D animationTexture;
+    private createShaderMaterial(
+        name: string,
+        fragmentShader: string,
+        uniforms: string[],
+        varyings: string = "",
+        varyingAssignments: string = ""
+    ): BABYLON.ShaderMaterial {
+        try {
+            // Setup vertex shader
+            const vertexShader = animatedVertexShader
+                .replace('// VARYINGS_PLACEHOLDER', varyings)
+                .replace('// VARYING_ASSIGNMENTS_PLACEHOLDER', varyingAssignments);
 
-            // Varyings
-            ${varyings}
+            BABYLON.Effect.ShadersStore[`${name}VertexShader`] = vertexShader;
+            BABYLON.Effect.ShadersStore[`${name}FragmentShader`] = fragmentShader;
 
-            void main(void) {
-                // Read animation value from texture
-                float texCoord = countryIndex / ${MAX_ANIMATION_COUNTRIES}.0;
-                float animValue = texture2D(animationTexture, vec2(texCoord, 0.5)).r;
+            // Create shader material
+            const shaderMaterial = new BABYLON.ShaderMaterial(name, this.scene, {
+                vertex: name,
+                fragment: name,
+            }, {
+                attributes: ["position", "normal", "countryIndex"],
+                uniforms: ["worldViewProjection", "world", "maxAnimationCountries", "animationAmplitude", ...uniforms],
+                samplers: ["animationTexture"]
+            });
 
-                // Apply animation - scale outward from center
-                vec3 animatedPosition = position;
-                vec3 centerDir = normalize(position);
-                animatedPosition += centerDir * animValue * ${ANIMATION_AMPLITUDE};
+            // Setup compilation callbacks
+            shaderMaterial.onCompiled = () => console.log(`Shader ${name} compiled successfully`);
+            shaderMaterial.onError = (effect, errors) => this.showShaderError(name, errors);
 
-                gl_Position = worldViewProjection * vec4(animatedPosition, 1.0);
-
-                ${varyings.includes('vCountryIndex') ? 'vCountryIndex = countryIndex;' : ''}
+            // Set common uniforms
+            if (this.animationTexture) {
+                shaderMaterial.setTexture("animationTexture", this.animationTexture);
             }
-        `;
+            shaderMaterial.setFloat("maxAnimationCountries", MAX_ANIMATION_COUNTRIES);
+            shaderMaterial.setFloat("animationAmplitude", ANIMATION_AMPLITUDE);
+            shaderMaterial.backFaceCulling = false;
+
+            return shaderMaterial;
+        } catch (error) {
+            this.showShaderError(name, error);
+            throw error;
+        }
     }
 
     private createBorderShaderMaterial(name: string, baseColor: BABYLON.Color3): BABYLON.ShaderMaterial {
-        this.createAnimatedVertexShader(name);
-
-        BABYLON.Effect.ShadersStore[`${name}FragmentShader`] = `
-            precision highp float;
-
-            // Uniforms
-            uniform vec3 baseColor;
-
-            void main(void) {
-                gl_FragColor = vec4(baseColor, 1.0);
-            }
-        `;
-
-        const shaderMaterial = new BABYLON.ShaderMaterial(name, this.scene, {
-            vertex: name,
-            fragment: name,
-        }, {
-            attributes: ["position", "normal", "countryIndex"],
-            uniforms: ["worldViewProjection", "world", "baseColor"],
-            samplers: ["animationTexture"]
-        });
-
-        if (this.animationTexture) {
-            shaderMaterial.setTexture("animationTexture", this.animationTexture);
-        }
-        shaderMaterial.setColor3("baseColor", baseColor);
-        shaderMaterial.backFaceCulling = false;
-
-        return shaderMaterial;
+        const material = this.createShaderMaterial(name, borderFragmentShader, ["baseColor"]);
+        material.setColor3("baseColor", baseColor);
+        return material;
     }
 
     private createCountryShaderMaterial(): BABYLON.ShaderMaterial {
-        const name = "countryShader";
-        this.createAnimatedVertexShader(name, "varying float vCountryIndex;");
-
-        BABYLON.Effect.ShadersStore[`${name}FragmentShader`] = `
-            precision highp float;
-
-            // Varying
-            varying float vCountryIndex;
-
-            // HSV to RGB conversion
-            vec3 hsv2rgb(vec3 c) {
-                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-            }
-
-            void main(void) {
-                // Create unique color per country using HSV
-                float hue = fract(vCountryIndex / 360.0);
-                vec3 color = hsv2rgb(vec3(hue, ${COUNTRY_HSV_SATURATION}, ${COUNTRY_HSV_VALUE}));
-
-                gl_FragColor = vec4(color, 1.0);
-            }
-        `;
-
-        const shaderMaterial = new BABYLON.ShaderMaterial(name, this.scene, {
-            vertex: name,
-            fragment: name,
-        }, {
-            attributes: ["position", "normal", "countryIndex"],
-            uniforms: ["worldViewProjection", "world"],
-            samplers: ["animationTexture"]
-        });
-
-        if (this.animationTexture) {
-            shaderMaterial.setTexture("animationTexture", this.animationTexture);
-        }
-        shaderMaterial.backFaceCulling = false;
-
-        return shaderMaterial;
+        const material = this.createShaderMaterial(
+            "countryShader",
+            countryFragmentShader,
+            ["countryHsvSaturation", "countryHsvValue"],
+            "varying float vCountryIndex;",
+            "vCountryIndex = countryIndex;"
+        );
+        material.setFloat("countryHsvSaturation", COUNTRY_HSV_SATURATION);
+        material.setFloat("countryHsvValue", COUNTRY_HSV_VALUE);
+        return material;
     }
 
     // Generic merge function - DRY approach for all mesh merging

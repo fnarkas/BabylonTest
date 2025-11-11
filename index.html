@@ -85,6 +85,38 @@
             margin-right: 8px;
             cursor: pointer;
         }
+
+        #error-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(220, 38, 38, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            z-index: 1000;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            display: none;
+        }
+
+        #error-toast.show {
+            display: block;
+        }
+
+        #error-toast h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            font-family: Arial, sans-serif;
+        }
+
+        #error-toast pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
     </style>
 </head>
 <body>
@@ -105,6 +137,11 @@
             <input type="checkbox" id="extrudedBordersToggle" checked>
             Extruded Borders
         </label>
+    </div>
+
+    <div id="error-toast">
+        <h3>Shader Compilation Error</h3>
+        <pre id="error-message"></pre>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
