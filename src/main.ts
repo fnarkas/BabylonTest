@@ -894,11 +894,30 @@ class EarthGlobe {
     private update(): void {
         this.frameCount++;
 
-        // Update FPS counter
+        // Update stats
         const fps = Math.round(this.engine.getFps());
         const fpsElement = document.getElementById('fps');
         if (fpsElement) {
-            fpsElement.textContent = `FPS: ${fps}`;
+            fpsElement.textContent = `${fps}`;
+        }
+
+        // Get draw calls from scene instrumentation
+        const drawCallsElement = document.getElementById('drawCalls');
+        if (drawCallsElement) {
+            const drawCalls = this.scene.getActiveMeshes().length;
+            drawCallsElement.textContent = `${drawCalls}`;
+        }
+
+        // Get total triangles
+        const trianglesElement = document.getElementById('triangles');
+        if (trianglesElement) {
+            let totalTriangles = 0;
+            this.scene.meshes.forEach(mesh => {
+                if (mesh.isEnabled() && mesh.isVisible) {
+                    totalTriangles += mesh.getTotalIndices() / 3;
+                }
+            });
+            trianglesElement.textContent = `${Math.round(totalTriangles).toLocaleString()}`;
         }
 
         // Animate all countries randomly
