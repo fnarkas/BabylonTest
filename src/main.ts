@@ -1,11 +1,14 @@
 // Babylon.js Earth Globe Application
 import * as BABYLON from '@babylonjs/core';
+import '@babylonjs/loaders/glTF';
 import earcut from 'earcut';
 
 // Import shaders
 import animatedVertexShader from './shaders/animated.vertex.glsl?raw';
 import borderFragmentShader from './shaders/border.fragment.glsl?raw';
 import countryFragmentShader from './shaders/country.fragment.glsl?raw';
+import unlitVertexShader from './shaders/unlit.vertex.glsl?raw';
+import unlitFragmentShader from './shaders/unlit.fragment.glsl?raw';
 
 // Constants
 const EARTH_RADIUS = 2.0;
@@ -76,6 +79,8 @@ class EarthGlobe {
     private showCountries: boolean;
     private frameCount: number;
     private sceneInstrumentation: BABYLON.SceneInstrumentation;
+    private bossPinTemplate: BABYLON.AbstractMesh | null;
+    private placedPins: BABYLON.AbstractMesh[];
 
     constructor() {
         this.canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -99,6 +104,8 @@ class EarthGlobe {
         this.animationData = new Float32Array(MAX_ANIMATION_COUNTRIES);
         this.showCountries = false;
         this.frameCount = 0;
+        this.bossPinTemplate = null;
+        this.placedPins = [];
 
         // Initialize scene instrumentation for accurate performance metrics
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -150,6 +157,12 @@ class EarthGlobe {
 
         // Load countries
         this.loadCountries();
+
+        // Load BossPin model
+        this.loadBossPinModel();
+
+        // Setup click handler
+        this.setupClickHandler();
     }
 
     private createEarthSphere(): void {
@@ -184,6 +197,18 @@ class EarthGlobe {
             const isVisible = (e.target as HTMLInputElement).checked;
             if (this.mergedExtrudedBorders) {
                 this.mergedExtrudedBorders.setEnabled(isVisible);
+            }
+        });
+
+        // Globe toggle
+        const globeToggle = document.getElementById('globeToggle') as HTMLInputElement;
+        globeToggle.addEventListener('change', (e) => {
+            const isVisible = (e.target as HTMLInputElement).checked;
+            this.earthSphere.setEnabled(isVisible);
+
+            // Also toggle countries if they exist
+            for (const mesh of this.countryMeshes) {
+                mesh.setEnabled(isVisible && this.showCountries);
             }
         });
     }
@@ -759,6 +784,53 @@ class EarthGlobe {
         }
     }
 
+    private createUnlitMaterial(originalMaterial: BABYLON.Material | null): BABYLON.ShaderMaterial {
+        const materialName = "unlitMaterial_" + Date.now();
+
+        BABYLON.Effect.ShadersStore[`${materialName}VertexShader`] = unlitVertexShader;
+        BABYLON.Effect.ShadersStore[`${materialName}FragmentShader`] = unlitFragmentShader;
+
+        const shaderMaterial = new BABYLON.ShaderMaterial(materialName, this.scene, {
+            vertex: materialName,
+            fragment: materialName,
+        }, {
+            attributes: ["position", "uv"],
+            uniforms: ["worldViewProjection", "baseColor", "hasTexture"],
+            samplers: ["baseColorTexture"]
+        });
+
+        // Try to extract color from original material
+        let baseColor = new BABYLON.Color4(1, 1, 1, 1);
+        let hasTexture = false;
+
+        if (originalMaterial) {
+            // Try to get base color from PBR material
+            const pbrMat = originalMaterial as any;
+            if (pbrMat.albedoColor) {
+                const c = pbrMat.albedoColor;
+                baseColor = new BABYLON.Color4(c.r, c.g, c.b, 1.0);
+            } else if (pbrMat.diffuseColor) {
+                const c = pbrMat.diffuseColor;
+                baseColor = new BABYLON.Color4(c.r, c.g, c.b, 1.0);
+            }
+
+            // Check for textures
+            if (pbrMat.albedoTexture) {
+                shaderMaterial.setTexture("baseColorTexture", pbrMat.albedoTexture);
+                hasTexture = true;
+            } else if (pbrMat.diffuseTexture) {
+                shaderMaterial.setTexture("baseColorTexture", pbrMat.diffuseTexture);
+                hasTexture = true;
+            }
+        }
+
+        shaderMaterial.setColor4("baseColor", baseColor);
+        shaderMaterial.setFloat("hasTexture", hasTexture ? 1.0 : 0.0);
+        shaderMaterial.backFaceCulling = false;
+
+        return shaderMaterial;
+    }
+
     private createBorderShaderMaterial(name: string, baseColor: BABYLON.Color3): BABYLON.ShaderMaterial {
         const material = this.createShaderMaterial(name, borderFragmentShader, ["baseColor"]);
         material.setColor3("baseColor", baseColor);
@@ -941,6 +1013,113 @@ class EarthGlobe {
             console.log(`Frame ${this.frameCount}: animationData[0]=${this.animationData[0].toFixed(3)}, animationData[5]=${this.animationData[5].toFixed(3)}, animationData[10]=${this.animationData[10].toFixed(3)}, animationData[20]=${this.animationData[20].toFixed(3)}`);
             console.log(`Total meshes in scene: ${this.scene.meshes.length}, Active meshes: ${this.scene.getActiveMeshes().length}`);
         }
+    }
+
+    private async loadBossPinModel(): Promise<void> {
+        try {
+            const result = await BABYLON.SceneLoader.ImportMeshAsync("", "/", "BossPin.glb", this.scene);
+
+            if (result.meshes.length > 0) {
+                console.log(`Loaded ${result.meshes.length} meshes from BossPin.glb`);
+
+                // Log all meshes
+                result.meshes.forEach((mesh, i) => {
+                    console.log(`  Mesh ${i}: ${mesh.name}, hasVertices: ${mesh.getTotalVertices() > 0}, material: ${mesh.material?.name}`);
+                });
+
+                // Get the root mesh or parent
+                this.bossPinTemplate = result.meshes[0];
+
+                // Check bounding info to see model size
+                const boundingInfo = this.bossPinTemplate.getHierarchyBoundingVectors();
+                console.log('Model bounds:', boundingInfo);
+
+                // Log children
+                const children = this.bossPinTemplate.getChildMeshes();
+                console.log(`Template has ${children.length} child meshes`);
+                children.forEach((child, i) => {
+                    console.log(`  Child ${i}: ${child.name}, vertices: ${child.getTotalVertices()}, material: ${child.material?.name}`);
+                });
+
+                this.bossPinTemplate.setEnabled(false); // Hide template
+
+                console.log('BossPin model loaded successfully');
+            }
+        } catch (error) {
+            console.error('Failed to load BossPin model:', error);
+        }
+    }
+
+    private setupClickHandler(): void {
+        this.scene.onPointerDown = (evt, pickResult) => {
+            if (pickResult.hit && pickResult.pickedPoint && this.bossPinTemplate) {
+                this.placePinAtPoint(pickResult.pickedPoint);
+            }
+        };
+    }
+
+    private placePinAtPoint(point: BABYLON.Vector3): void {
+        if (!this.bossPinTemplate) {
+            console.warn('BossPin template not loaded yet');
+            return;
+        }
+
+        // Clone all meshes in the hierarchy manually
+        const clonedMeshes: BABYLON.AbstractMesh[] = [];
+        const originalChildren = this.bossPinTemplate.getChildMeshes();
+
+        // Calculate surface normal (direction from globe center to click point)
+        // On a sphere, the normal at any surface point is simply the normalized position vector
+        const normal = point.normalize();
+
+        // Position on globe surface (pivot point at the base of the pin)
+        const pivotPosition = normal.scale(EARTH_RADIUS);
+
+        // Create parent transform node at the pivot point (base of pin)
+        const pinPivot = new BABYLON.TransformNode("pinPivot_" + Date.now(), this.scene);
+        pinPivot.position = pivotPosition;
+
+        // Orient the pivot so its local Y-axis points along the normal (outward from globe)
+        // Use quaternion rotation to align local Y-axis with the normal vector
+        const defaultUp = BABYLON.Vector3.Up(); // Local Y-axis (0, 1, 0)
+        const rotationQuat = BABYLON.Quaternion.FromUnitVectorsToRef(
+            defaultUp,
+            normal,
+            new BABYLON.Quaternion()
+        );
+        pinPivot.rotationQuaternion = rotationQuat;
+
+        // Create pin container as child of pivot
+        const pinContainer = new BABYLON.TransformNode("pin_" + Date.now(), this.scene);
+        pinContainer.parent = pinPivot;
+
+        // Scale the pin significantly (model is very small - about 0.015 units)
+        const pinScale = 150; // 5x bigger than before (30 * 5 = 150)
+        pinContainer.scaling = new BABYLON.Vector3(pinScale, pinScale, pinScale);
+
+        // Clone each child mesh and apply unlit shader
+        originalChildren.forEach(child => {
+            const clonedChild = child.clone(child.name + "_clone", pinContainer);
+            if (clonedChild) {
+                clonedChild.setEnabled(true);
+                clonedMeshes.push(clonedChild);
+
+                // Apply unlit shader to make it bright
+                const unlitMaterial = this.createUnlitMaterial(child.material);
+                clonedChild.material = unlitMaterial;
+
+                console.log('Cloned child mesh:', clonedChild.name, 'vertices:', clonedChild.getTotalVertices());
+            }
+        });
+
+        console.log('Pin created with', clonedMeshes.length, 'child meshes');
+
+        this.placedPins.push(pinPivot as any);
+
+        console.log(`Placed pin at ${pivotPosition.toString()}, scale: ${pinScale}`);
+        console.log('Pin has', pinContainer.getChildMeshes().length, 'child meshes');
+        console.log('Total placed pins:', this.placedPins.length);
+        console.log('Scene total meshes:', this.scene.meshes.length);
     }
 }
 
