@@ -1,6 +1,7 @@
 // Babylon.js Earth Globe Application
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
+import '@babylonjs/inspector';
 import earcut from 'earcut';
 
 // Import shaders
@@ -97,7 +98,7 @@ class EarthGlobe {
             BABYLON.Vector3.Zero(),
             this.scene
         );
-        this.earthSphere = BABYLON.MeshBuilder.CreateSphere("temp", {}, this.scene);
+        this.earthSphere = null!; // Will be created in createEarthSphere()
         this.polygonsData = [];
         this.countriesData = [];
         this.mergedCountries = null;
@@ -158,9 +159,6 @@ class EarthGlobe {
             this.engine.resize();
         });
 
-        // Setup border toggle controls
-        this.setupBorderToggles();
-
         // Load countries
         this.loadCountries();
 
@@ -171,6 +169,19 @@ class EarthGlobe {
 
         // Setup drag-and-drop pin placement
         this.setupPinDragAndDrop();
+
+        // Setup inspector toggle (press 'I' key to open/close)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'i' || e.key === 'I') {
+                if (this.scene.debugLayer.isVisible()) {
+                    this.scene.debugLayer.hide();
+                } else {
+                    this.scene.debugLayer.show({
+                        embedMode: true,
+                    });
+                }
+            }
+        });
     }
 
     private createEarthSphere(): void {
@@ -187,38 +198,6 @@ class EarthGlobe {
         material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
 
         this.earthSphere.material = material;
-    }
-
-    private setupBorderToggles(): void {
-        // Tube borders toggle
-        const tubeBordersToggle = document.getElementById('tubeBordersToggle') as HTMLInputElement;
-        tubeBordersToggle.addEventListener('change', (e) => {
-            const isVisible = (e.target as HTMLInputElement).checked;
-            if (this.mergedTubeBorders) {
-                this.mergedTubeBorders.setEnabled(isVisible);
-            }
-        });
-
-        // Extruded borders toggle
-        const extrudedBordersToggle = document.getElementById('extrudedBordersToggle') as HTMLInputElement;
-        extrudedBordersToggle.addEventListener('change', (e) => {
-            const isVisible = (e.target as HTMLInputElement).checked;
-            if (this.mergedExtrudedBorders) {
-                this.mergedExtrudedBorders.setEnabled(isVisible);
-            }
-        });
-
-        // Globe toggle
-        const globeToggle = document.getElementById('globeToggle') as HTMLInputElement;
-        globeToggle.addEventListener('change', (e) => {
-            const isVisible = (e.target as HTMLInputElement).checked;
-            this.earthSphere.setEnabled(isVisible);
-
-            // Also toggle countries if they exist
-            for (const mesh of this.countryMeshes) {
-                mesh.setEnabled(isVisible && this.showCountries);
-            }
-        });
     }
 
     private latLonToSphere(lat: number, lon: number, altitude: number = 0): BABYLON.Vector3 {

@@ -52,45 +52,6 @@
             line-height: 1.6;
         }
 
-        #status {
-            position: absolute;
-            top: 140px;
-            left: 10px;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            background-color: rgba(0, 150, 0, 0.8);
-            padding: 5px 10px;
-            border-radius: 50%;
-            width: 10px;
-            height: 10px;
-            z-index: 100;
-        }
-
-        #controls {
-            position: absolute;
-            top: 180px;
-            left: 10px;
-            color: #333;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            background-color: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 100;
-        }
-
-        #controls label {
-            display: block;
-            margin: 5px 0;
-            cursor: pointer;
-        }
-
-        #controls input[type="checkbox"] {
-            margin-right: 8px;
-            cursor: pointer;
-        }
-
         #error-toast {
             position: fixed;
             top: 20px;
@@ -174,21 +135,6 @@
         <div>FPS: <span id="fps">0</span></div>
         <div>Draw Calls: <span id="drawCalls">0</span></div>
         <div>Triangles: <span id="triangles">0</span></div>
-    </div>
-    <div id="status"></div>
-    <div id="controls">
-        <label>
-            <input type="checkbox" id="tubeBordersToggle" checked>
-            Tube Borders
-        </label>
-        <label>
-            <input type="checkbox" id="extrudedBordersToggle" checked>
-            Extruded Borders
-        </label>
-        <label>
-            <input type="checkbox" id="globeToggle" checked>
-            Show Globe
-        </label>
     </div>
 
     <div id="error-toast">
