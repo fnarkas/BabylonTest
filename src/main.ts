@@ -2,6 +2,7 @@
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 import '@babylonjs/inspector';
+import * as GUI from '@babylonjs/gui';
 import earcut from 'earcut';
 import { loadBorderData, type BorderData } from './borderLoader';
 
@@ -85,11 +86,15 @@ class EarthGlobe {
     private placedPins: BABYLON.AbstractMesh[];
     private previewPin: BABYLON.TransformNode | null;
     private isPlacingMode: boolean;
-    private pinButton: HTMLElement | null;
+    private advancedTexture: GUI.AdvancedDynamicTexture | null;
+    private pinButtonImage: GUI.Image | null;
+    private bottomPanel: GUI.Rectangle | null;
     private loadingProgress: HTMLElement | null;
     private loadingText: HTMLElement | null;
     private loadingScreen: HTMLElement | null;
     private borderData: BorderData | null;
+    private pinButton: HTMLElement | null;
+    private tempQuaternion: BABYLON.Quaternion;  // Reusable quaternion to avoid allocations
 
     constructor() {
         this.canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -117,11 +122,15 @@ class EarthGlobe {
         this.placedPins = [];
         this.previewPin = null;
         this.isPlacingMode = false;
-        this.pinButton = null;
+        this.advancedTexture = null;
+        this.pinButtonImage = null;
+        this.bottomPanel = null;
         this.loadingProgress = document.getElementById('loadingProgress');
         this.loadingText = document.getElementById('loadingText');
         this.loadingScreen = document.getElementById('loadingScreen');
         this.borderData = null;
+        this.pinButton = null;
+        this.tempQuaternion = new BABYLON.Quaternion();
 
         // Initialize scene instrumentation for accurate performance metrics
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -172,6 +181,8 @@ class EarthGlobe {
         // Handle resize
         window.addEventListener('resize', () => {
             this.engine.resize();
+            // Recreate GUI on resize for responsive layout (important for mobile orientation changes)
+            this.recreateGUI();
         });
 
         this.updateLoadingProgress(25, 'Loading countries...');
@@ -186,6 +197,9 @@ class EarthGlobe {
         this.createPreviewPin();
 
         this.updateLoadingProgress(90, 'Setting up controls...');
+
+        // Create GUI
+        this.createGUI();
 
         // Setup drag-and-drop pin placement
         this.setupPinDragAndDrop();
@@ -296,6 +310,14 @@ class EarthGlobe {
             this.animationTexture = null;
         }
 
+        // Dispose GUI
+        if (this.advancedTexture) {
+            this.advancedTexture.dispose();
+            this.advancedTexture = null;
+        }
+        this.pinButtonImage = null;
+        this.bottomPanel = null;
+
         // Stop render loop
         this.engine.stopRenderLoop();
 
@@ -338,6 +360,7 @@ class EarthGlobe {
         this.placedPins = [];
         this.previewPin = null;
         this.isPlacingMode = false;
+        this.tempQuaternion = new BABYLON.Quaternion();
 
         // Reinitialize
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -1259,32 +1282,40 @@ class EarthGlobe {
     }
 
     private setupPinDragAndDrop(): void {
-        // Get the pin button element
-        this.pinButton = document.getElementById('pinButton');
-        if (!this.pinButton) return;
+        if (!this.pinButtonImage) return;
 
-        // Handle mousedown on pin button - enter placing mode
-        this.pinButton.addEventListener('mousedown', (e) => {
-            e.preventDefault();
+        // Handle pointerdown on GUI pin button - click animation and enter placing mode
+        this.pinButtonImage.onPointerDownObservable.add(() => {
+            // Apply click animation
+            this.pinButtonImage!.scaleX = 0.95;
+            this.pinButtonImage!.scaleY = 0.95;
+
+            // Enter placing mode
             this.enterPlacingMode();
         });
 
-        // Handle mousemove on canvas - update preview pin position
-        this.canvas.addEventListener('mousemove', (e) => {
+        // Handle pointerup on button to reset scale
+        this.pinButtonImage.onPointerUpObservable.add(() => {
+            this.pinButtonImage!.scaleX = 1.0;
+            this.pinButtonImage!.scaleY = 1.0;
+        });
+
+        // Handle pointermove on canvas - update preview pin position
+        this.canvas.addEventListener('pointermove', (e) => {
             if (this.isPlacingMode && this.previewPin) {
                 this.updatePreviewPinPosition(e);
             }
         });
 
-        // Handle mouseup - place pin and exit placing mode
-        this.canvas.addEventListener('mouseup', (e) => {
+        // Handle pointerup - place pin and exit placing mode
+        this.canvas.addEventListener('pointerup', (e) => {
             if (this.isPlacingMode) {
                 this.exitPlacingMode(true); // true = place the pin
             }
         });
 
-        // Handle mouse leaving canvas - cancel placing mode
-        this.canvas.addEventListener('mouseleave', (e) => {
+        // Handle pointer leaving canvas - cancel placing mode
+        this.canvas.addEventListener('pointerleave', (e) => {
             if (this.isPlacingMode) {
                 this.exitPlacingMode(false); // false = don't place the pin
             }
@@ -1296,9 +1327,9 @@ class EarthGlobe {
 
         this.isPlacingMode = true;
 
-        // Hide the pin button
-        if (this.pinButton) {
-            this.pinButton.style.display = 'none';
+        // Hide ONLY the GUI pin button, keep the panel visible
+        if (this.pinButtonImage) {
+            this.pinButtonImage.isVisible = false;
         }
 
         // Hide cursor during placing mode
@@ -1316,9 +1347,9 @@ class EarthGlobe {
     private exitPlacingMode(placePin: boolean): void {
         this.isPlacingMode = false;
 
-        // Show the pin button
-        if (this.pinButton) {
-            this.pinButton.style.display = 'block';
+        // Show ONLY the GUI pin button (panel stays visible always)
+        if (this.pinButtonImage) {
+            this.pinButtonImage.isVisible = true;
         }
 
         // Show cursor again
@@ -1379,11 +1410,88 @@ class EarthGlobe {
         console.log('Preview pin created and hidden');
     }
 
-    private updatePreviewPinPosition(event: MouseEvent): void {
+    private createGUI(): void {
+        // Create fullscreen UI
+        this.advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, this.scene);
+
+        // Create pin button FIRST so it appears BEHIND the panel
+        // Actual image is 196x900px, scale to 1/2
+        const pinScale = 0.5;
+        this.pinButtonImage = new GUI.Image("pinButton", "/DefaultPin.png");
+        this.pinButtonImage.width = `${196 * pinScale}px`;
+        this.pinButtonImage.height = `${900 * pinScale}px`;
+        this.pinButtonImage.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
+        this.pinButtonImage.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+        this.pinButtonImage.top = "170px";  // Way down - negative means up from bottom
+        this.pinButtonImage.left = "50px";   // Slight offset to the right
+        this.pinButtonImage.rotation = 0.14; // 8 degrees in radians
+
+        // Make it interactive
+        this.pinButtonImage.isPointerBlocker = true;
+
+        // Add hover effects
+        this.pinButtonImage.onPointerEnterObservable.add(() => {
+            if (!this.isPlacingMode) {
+                this.pinButtonImage!.scaleX = 1.05;
+                this.pinButtonImage!.scaleY = 1.05;
+            }
+        });
+
+        this.pinButtonImage.onPointerOutObservable.add(() => {
+            if (!this.isPlacingMode) {
+                this.pinButtonImage!.scaleX = 1.0;
+                this.pinButtonImage!.scaleY = 1.0;
+            }
+        });
+
+        // Add pin to GUI FIRST (so it's behind)
+        this.advancedTexture.addControl(this.pinButtonImage);
+
+        // Create bottom panel AFTER pin (so it's in front)
+        this.bottomPanel = new GUI.Rectangle("bottomPanel");
+        this.bottomPanel.width = "600px";
+        this.bottomPanel.height = "150px";
+        this.bottomPanel.thickness = 0;
+        this.bottomPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
+        this.bottomPanel.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+        this.bottomPanel.top = "30px";
+
+        // Solid blue color - no transparency
+        this.bottomPanel.background = "#6496DC";  // Blue color
+        this.bottomPanel.alpha = 1.0;  // Fully opaque
+        this.bottomPanel.cornerRadius = 60;
+
+        // Add panel to GUI AFTER pin (so it's in front)
+        this.advancedTexture.addControl(this.bottomPanel);
+
+        console.log('GUI created with fixed sizing (matching original DOM layout)');
+    }
+
+    private recreateGUI(): void {
+        // Dispose old GUI
+        if (this.advancedTexture) {
+            this.advancedTexture.dispose();
+            this.advancedTexture = null;
+        }
+        this.pinButtonImage = null;
+        this.bottomPanel = null;
+
+        // Recreate GUI with new dimensions
+        this.createGUI();
+
+        // Re-setup pin drag and drop event handlers
+        this.setupPinDragAndDrop();
+
+        console.log('GUI recreated for new screen size');
+    }
+
+    private updatePreviewPinPosition(event: PointerEvent): void {
         if (!this.previewPin) return;
 
-        // Get picking ray from mouse position
-        const pickResult = this.scene.pick(event.clientX, event.clientY);
+        // PERFORMANCE OPTIMIZATION: Only pick against the earth sphere, not all meshes
+        const pickResult = this.scene.pick(event.clientX, event.clientY, (mesh) => {
+            return mesh === this.earthSphere;
+        });
 
         if (pickResult.hit && pickResult.pickedPoint) {
             // Show the pin when we hit the globe for the first time
@@ -1391,21 +1499,21 @@ class EarthGlobe {
                 this.previewPin.setEnabled(true);
             }
 
-            // Calculate surface normal
+            // Calculate surface normal (normalize in place to avoid allocation)
             const normal = pickResult.pickedPoint.normalize();
 
-            // Position on globe surface
-            const pivotPosition = normal.scale(EARTH_RADIUS);
-            this.previewPin.position = pivotPosition;
+            // Position on globe surface (scale in place to avoid allocation)
+            this.previewPin.position.copyFrom(normal).scaleInPlace(EARTH_RADIUS);
 
             // Orient the pivot so its local Y-axis points along the normal
+            // Reuse tempQuaternion to avoid allocating a new quaternion every frame
             const defaultUp = BABYLON.Vector3.Up();
-            const rotationQuat = BABYLON.Quaternion.FromUnitVectorsToRef(
+            BABYLON.Quaternion.FromUnitVectorsToRef(
                 defaultUp,
                 normal,
-                new BABYLON.Quaternion()
+                this.tempQuaternion
             );
-            this.previewPin.rotationQuaternion = rotationQuat;
+            this.previewPin.rotationQuaternion = this.tempQuaternion;
         }
         // Don't hide the pin when not over the globe - keep it at last position
         // It will only be hidden when exiting placing mode
