@@ -5,6 +5,7 @@ import '@babylonjs/inspector';
 import * as GUI from '@babylonjs/gui';
 import earcut from 'earcut';
 import { loadBorderData, type BorderData } from './borderLoaderWasm';
+import { loadSegments, getSharedSegments, type SegmentData, type Segment3D } from './segmentLoader';
 
 // Import shaders
 import animatedVertexShader from './shaders/animated.vertex.glsl?raw';
@@ -57,12 +58,15 @@ interface NeighborInfo {
 
 interface CountryData {
     name: string;
+    iso2: string;
+    index: number;
     polygonIndices: number[];    // Indices into polygonsData array
     neighbourCountries: NeighborInfo[];
 }
 
 interface CountryJSON {
     name_en: string;
+    iso2: string;
     paths: string;
 }
 
@@ -93,11 +97,15 @@ class EarthGlobe {
     private loadingText: HTMLElement | null;
     private loadingScreen: HTMLElement | null;
     private borderData: BorderData | null;
+    private segmentData: SegmentData | null;
+    private mergedSegmentBorders: BABYLON.Mesh | null;  // Merged mesh for segment borders
+    private segmentAnimationIndices: Map<number, number[]>;  // Map from segment index to array of country indices
+    private textureBuffer: Uint8ClampedArray | null;  // Pre-allocated buffer for texture updates
     private tempQuaternion: BABYLON.Quaternion;  // Reusable quaternion to avoid allocations
 
     constructor() {
         this.canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
-        this.engine = new BABYLON.Engine(this.canvas, true, { preserveDrawingBuffer: true, stencil: true });
+        this.engine = new BABYLON.Engine(this.canvas, true, { preserveDrawingBuffer: false, stencil: true });
         this.scene = new BABYLON.Scene(this.engine);
         this.camera = new BABYLON.ArcRotateCamera(
             "camera",
@@ -114,7 +122,7 @@ class EarthGlobe {
         this.mergedTubeBorders = null;
         this.mergedExtrudedBorders = null;
         this.animationTexture = null;
-        this.animationData = new Float32Array(MAX_ANIMATION_COUNTRIES);
+        this.animationData = new Float32Array(1024);  // Countries + segments (1024 max)
         this.showCountries = false;
         this.frameCount = 0;
         this.bossPinTemplate = null;
@@ -128,6 +136,10 @@ class EarthGlobe {
         this.loadingText = document.getElementById('loadingText');
         this.loadingScreen = document.getElementById('loadingScreen');
         this.borderData = null;
+        this.segmentData = null;
+        this.mergedSegmentBorders = null;
+        this.segmentAnimationIndices = new Map();
+        this.textureBuffer = null;
         this.tempQuaternion = new BABYLON.Quaternion();
 
         // Initialize scene instrumentation for accurate performance metrics
@@ -351,7 +363,7 @@ class EarthGlobe {
         this.mergedTubeBorders = null;
         this.mergedExtrudedBorders = null;
         this.animationTexture = null;
-        this.animationData = new Float32Array(MAX_ANIMATION_COUNTRIES);
+        this.animationData = new Float32Array(1024);  // Countries + segments (1024 max)
         this.showCountries = false;
         this.frameCount = 0;
         this.bossPinTemplate = null;
@@ -731,8 +743,13 @@ class EarthGlobe {
 
     private async loadCountries(): Promise<void> {
         try {
-            // Load binary border data first
-            this.borderData = await loadBorderData('borders.bin');
+            // Load binary border data and segments in parallel
+            const [borderData, segmentData] = await Promise.all([
+                loadBorderData('borders.bin'),
+                loadSegments('segments.json')
+            ]);
+            this.borderData = borderData;
+            this.segmentData = segmentData;
 
             const response = await fetch('countries.json');
             const countries = await response.json() as CountryJSON[];
@@ -795,6 +812,8 @@ class EarthGlobe {
                         // Create country metadata
                         const countryData: CountryData = {
                             name: country.name_en,
+                            iso2: country.iso2,
+                            index: this.countriesData.length,
                             polygonIndices: polygonIndices,
                             neighbourCountries: []
                         };
@@ -825,6 +844,9 @@ class EarthGlobe {
             this.mergeCountryPolygons();
             this.mergeTubeBorders();
             this.mergeExtrudedBorders();
+
+            // Render segment borders (international borders only)
+            this.renderSegmentBorders();
 
             // Detect neighbors after all countries are loaded
             this.detectNeighbors();
@@ -926,35 +948,37 @@ class EarthGlobe {
     }
 
     private createAnimationTexture(): void {
-        // Create texture to store animation values per country
-        this.animationTexture = new BABYLON.DynamicTexture("animationTexture", { width: MAX_ANIMATION_COUNTRIES, height: 1 }, this.scene, false);
+        // Create 1D texture (1024x1) to store animation values per country AND per segment
+        const textureWidth = 1024;
+        this.animationTexture = new BABYLON.DynamicTexture("animationTexture", { width: textureWidth, height: 1 }, this.scene, false);
 
-        // Set willReadFrequently for better performance since we update this every frame
-        const context = this.animationTexture.getContext() as CanvasRenderingContext2D;
-        if (context.canvas) {
-            // Note: This needs to be done before first getImageData call, but DynamicTexture already created the context
-            // The warning is expected for this use case
+        // Pre-allocate buffer for updates
+        this.textureBuffer = new Uint8ClampedArray(textureWidth * 4);
+
+        // Initialize alpha channel to 255
+        for (let i = 0; i < this.textureBuffer.length; i += 4) {
+            this.textureBuffer[i + 3] = 255;
         }
 
         this.updateAnimationTexture();
     }
 
     private updateAnimationTexture(): void {
-        if (!this.animationTexture) return;
+        if (!this.animationTexture || !this.textureBuffer) return;
 
-        const context = this.animationTexture.getContext() as CanvasRenderingContext2D;
-        const imageData = context.getImageData(0, 0, MAX_ANIMATION_COUNTRIES, 1);
+        const entriesUsed = this.countriesData.length + this.segmentAnimationIndices.size;
 
-        // Write animation values to texture (RGBA, but we only use R channel)
-        for (let i = 0; i < MAX_ANIMATION_COUNTRIES; i++) {
-            const value = this.animationData[i];
+        // Update buffer directly (much faster than canvas operations)
+        for (let i = 0; i < entriesUsed; i++) {
+            const value = this.animationData[i] || 0;
             const pixelIndex = i * 4;
-            imageData.data[pixelIndex] = value * 255;      // R channel
-            imageData.data[pixelIndex + 1] = 0;             // G channel
-            imageData.data[pixelIndex + 2] = 0;             // B channel
-            imageData.data[pixelIndex + 3] = 255;           // A channel
+            this.textureBuffer[pixelIndex] = value * 255;  // R channel
+            // G, B already 0, A already 255
         }
 
+        // Update texture from buffer (1D, single row)
+        const context = this.animationTexture.getContext() as CanvasRenderingContext2D;
+        const imageData = new ImageData(this.textureBuffer, 1024, 1);
         context.putImageData(imageData, 0, 0);
         this.animationTexture.update();
     }
@@ -992,7 +1016,7 @@ class EarthGlobe {
                 fragment: name,
             }, {
                 attributes: ["position", "normal", "countryIndex"],
-                uniforms: ["worldViewProjection", "world", "maxAnimationCountries", "animationAmplitude", ...uniforms],
+                uniforms: ["worldViewProjection", "world", "animationTextureWidth", "animationAmplitude", ...uniforms],
                 samplers: ["animationTexture"]
             });
 
@@ -1004,7 +1028,7 @@ class EarthGlobe {
             if (this.animationTexture) {
                 shaderMaterial.setTexture("animationTexture", this.animationTexture);
             }
-            shaderMaterial.setFloat("maxAnimationCountries", MAX_ANIMATION_COUNTRIES);
+            shaderMaterial.setFloat("animationTextureWidth", 1024);
             shaderMaterial.setFloat("animationAmplitude", ANIMATION_AMPLITUDE);
             shaderMaterial.backFaceCulling = false;
 
@@ -1196,6 +1220,123 @@ class EarthGlobe {
         );
     }
 
+    private renderSegmentBorders(): void {
+        if (!this.segmentData) {
+            console.log('No segment data loaded, skipping segment border rendering');
+            return;
+        }
+
+        console.log('Rendering segment borders...');
+        const startTime = performance.now();
+
+        // Get only shared segments (no coastlines)
+        const sharedSegments = getSharedSegments(this.segmentData);
+        console.log(`Rendering ${sharedSegments.length} shared border segments`);
+
+        // Clear previous segment animation mappings
+        this.segmentAnimationIndices.clear();
+
+        // Create tube meshes - one per segment
+        const segmentTubes: BABYLON.Mesh[] = [];
+        const vertexCounts: number[] = [];
+        const segmentIndicesPerTube: number[] = [];
+
+        for (let segmentIdx = 0; segmentIdx < sharedSegments.length; segmentIdx++) {
+            const segment = sharedSegments[segmentIdx];
+            if (segment.points.length < 2) continue;
+
+            try {
+                const tube = BABYLON.MeshBuilder.CreateTube(
+                    "segmentBorder",
+                    {
+                        path: segment.points,
+                        radius: TUBE_RADIUS * 1.2,  // Slightly thicker than regular borders
+                        tessellation: TUBE_TESSELLATION,
+                        cap: BABYLON.Mesh.CAP_ALL
+                    },
+                    this.scene
+                );
+
+                segmentTubes.push(tube);
+                vertexCounts.push(tube.getTotalVertices());
+
+                // Assign this segment an index in the animation texture (after countries)
+                const segmentAnimationIndex = MAX_ANIMATION_COUNTRIES + segmentIdx;
+                segmentIndicesPerTube.push(segmentAnimationIndex);
+
+                // Store mapping from segment animation index to country indices
+                const countryIndices: number[] = [];
+                for (const countryCode of segment.countries) {
+                    const countryData = this.countriesData.find(c => c.iso2 === countryCode);
+                    if (countryData) {
+                        countryIndices.push(countryData.index);
+                    }
+                }
+                this.segmentAnimationIndices.set(segmentAnimationIndex, countryIndices);
+            } catch (error) {
+                console.error('Error creating segment tube:', error);
+            }
+        }
+
+        if (segmentTubes.length === 0) {
+            console.log('No segment tubes created');
+            return;
+        }
+
+        // Merge all segment tubes into a single mesh
+        this.mergedSegmentBorders = BABYLON.Mesh.MergeMeshes(
+            segmentTubes,
+            true,  // disposeSource
+            true,  // allow32BitsIndices
+            undefined,  // meshSubclass
+            false,  // subdivideWithSubMeshes
+            false  // multiMultiMaterial
+        );
+
+        if (!this.mergedSegmentBorders) {
+            console.error('Failed to merge segment borders');
+            return;
+        }
+
+        this.mergedSegmentBorders.name = "mergedSegmentBorders";
+
+        // Rebuild countryIndex attribute - but use segment animation index instead
+        const totalVertices = this.mergedSegmentBorders.getTotalVertices();
+        const segmentIndices = new Float32Array(totalVertices);
+
+        let vertexOffset = 0;
+        for (let tubeIdx = 0; tubeIdx < vertexCounts.length; tubeIdx++) {
+            const vertexCount = vertexCounts[tubeIdx];
+            const segmentAnimationIndex = segmentIndicesPerTube[tubeIdx];
+            for (let i = 0; i < vertexCount; i++) {
+                segmentIndices[vertexOffset + i] = segmentAnimationIndex;
+            }
+            vertexOffset += vertexCount;
+        }
+
+        // Create custom vertex buffer for countryIndex (stores segment animation index)
+        const buffer = new BABYLON.VertexBuffer(
+            this.engine,
+            segmentIndices,
+            "countryIndex",
+            false,  // updatable
+            false,  // postponeInternalCreation
+            1,      // stride
+            false   // instanced
+        );
+        this.mergedSegmentBorders.setVerticesBuffer(buffer);
+
+        // Apply animated shader material (white color to match tube borders)
+        const material = this.createBorderShaderMaterial(
+            "segmentBorderShader",
+            BORDER_COLOR_WHITE
+        );
+        this.mergedSegmentBorders.material = material;
+
+        const endTime = performance.now();
+        console.log(`Rendered ${sharedSegments.length} segment borders in ${(endTime - startTime).toFixed(2)}ms`);
+    }
+
     private updateStats(): void {
         const fps = Math.round(this.engine.getFps());
         const fpsElement = document.getElementById('fps');
@@ -1229,6 +1370,16 @@ class EarthGlobe {
             const offset = i * 0.5;
             const frequency = 0.5 + (i % 10) * 0.1;
             this.animationData[i] = (Math.sin(time * frequency + offset) + 1) * 0.5;  // Range 0-1
+        }
+
+        // Update segment animation values - use max of all countries in that segment
+        for (const [segmentAnimationIndex, countryIndices] of this.segmentAnimationIndices) {
+            let maxValue = 0;
+            for (const countryIndex of countryIndices) {
+                const countryValue = this.animationData[countryIndex] || 0;
+                maxValue = Math.max(maxValue, countryValue);
+            }
+            this.animationData[segmentAnimationIndex] = maxValue;
         }
 
         this.updateAnimationTexture();

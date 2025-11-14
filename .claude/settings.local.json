@@ -5,7 +5,22 @@
       "Bash(node -e:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(odin version:*)",
+      "Bash(odin build:*)",
+      "Bash(chmod:*)",
+      "Bash(/Users/oloflandin/Programming/BabylonTest/build-wasm.sh)",
+      "Bash(npx vite build)",
+      "Bash(cat:*)",
+      "Bash(./build-prune.sh:*)",
+      "Bash(./prune_borders:*)",
+      "Bash(open http://localhost:5173/test-segments.html)",
+      "Bash(open http://localhost:5173/test-belgium-netherlands.html)",
+      "Bash(open http://localhost:3002/test-belgium-netherlands.html)",
+      "Bash(open http://localhost:3002/test-closest-points.html)",
+      "Bash(open http://localhost:3002/test-segments-2d.html)",
+      "Bash(npm run generate-segments:*)",
+      "Bash(npm run test:segments:*)"
     ],
     "deny": [],
     "ask": []

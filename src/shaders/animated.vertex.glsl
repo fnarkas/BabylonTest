@@ -9,15 +9,15 @@ attribute float countryIndex;
 uniform mat4 worldViewProjection;
 uniform mat4 world;
 uniform sampler2D animationTexture;
-uniform float maxAnimationCountries;
+uniform float animationTextureWidth;
 uniform float animationAmplitude;
 
 // Varyings (will be injected)
 // VARYINGS_PLACEHOLDER
 
 void main(void) {
-    // Read animation value from texture
-    float texCoord = countryIndex / maxAnimationCountries;
+    // Read animation value from 1D texture (single row)
+    float texCoord = (countryIndex + 0.5) / animationTextureWidth;
     float animValue = texture2D(animationTexture, vec2(texCoord, 0.5)).r;
 
     // Apply animation - scale outward from center
