@@ -10,7 +10,8 @@
     "test": "node test_neighbors_new.cjs",
     "test:segments": "tsx scripts/test-segment-loader.ts",
     "generate-borders": "node scripts/generate_borders.mjs",
-    "generate-segments": "tsx scripts/generate-segments.ts"
+    "generate-segments": "tsx scripts/generate-segments.ts",
+    "detect-enclaves": "tsx scripts/detect-enclaves.ts"
   },
   "devDependencies": {
     "@babylonjs/inspector": "^7.54.3",

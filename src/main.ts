@@ -68,6 +68,7 @@ interface CountryJSON {
     name_en: string;
     iso2: string;
     paths: string;
+    holes?: string[][];  // Array of hole ISO2 codes per polygon
 }
 
 class EarthGlobe {
@@ -413,21 +414,39 @@ class EarthGlobe {
         return new BABYLON.Vector3(x, y, z);
     }
 
-    private triangulatePolygon(points: { x: number; y: number }[]): number[] {
+    private triangulatePolygon(points: { x: number; y: number }[], holes?: { x: number; y: number }[][]): number[] {
         // Use earcut library for triangulation
-        // Flatten the 2D coordinates for earcut
+        // Flatten the 2D coordinates for earcut (outer ring + holes)
         const flatCoords: number[] = [];
+
+        // Add outer ring
         for (const point of points) {
             flatCoords.push(point.x, point.y);
         }
 
-        // Triangulate using earcut
-        const indices = earcut(flatCoords);
+        // Track where each hole starts
+        const holeIndices: number[] = [];
+
+        // Add holes
+        if (holes && holes.length > 0) {
+            for (const hole of holes) {
+                // Record the starting vertex index of this hole
+                holeIndices.push(flatCoords.length / 2);
+
+                // Add hole vertices
+                for (const point of hole) {
+                    flatCoords.push(point.x, point.y);
+                }
+            }
+        }
+
+        // Triangulate using earcut with holes
+        const indices = earcut(flatCoords, holeIndices.length > 0 ? holeIndices : undefined, 2);
 
         return indices;
     }
 
-    private createCountryMesh(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE): BABYLON.Mesh | null {
+    private createCountryMesh(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE, holes?: LatLonPoint[][]): BABYLON.Mesh | null {
         if (latLonPoints.length < 3) {
             console.error("Not enough points to create mesh");
             return null;
@@ -437,8 +456,11 @@ class EarthGlobe {
             // Convert lat/lon points to 2D for triangulation (use as-is)
             const points2D = latLonPoints.map(p => ({ x: p.lat, y: p.lon }));
 
-            // Triangulate
-            const indices = this.triangulatePolygon(points2D);
+            // Convert holes to 2D
+            const holes2D = holes ? holes.map(hole => hole.map(p => ({ x: p.lat, y: p.lon }))) : [];
+
+            // Triangulate with holes
+            const indices = this.triangulatePolygon(points2D, holes2D);
 
             if (!indices || indices.length === 0) {
                 console.error("Triangulation failed");
@@ -452,9 +474,11 @@ class EarthGlobe {
             }
 
             // Convert lat/lon points to 3D sphere coordinates
+            // Include both outer ring and hole vertices
             const positions: number[] = [];
             const normals: number[] = [];
 
+            // Add outer ring vertices
             for (const point of latLonPoints) {
                 const vertex = this.latLonToSphere(point.lat, point.lon, altitude);
                 positions.push(vertex.x, vertex.y, vertex.z);
@@ -462,6 +486,20 @@ class EarthGlobe {
                 // Normal points outward from sphere center
                 const normal = vertex.normalize();
                 normals.push(normal.x, normal.y, normal.z);
+            }
+
+            // Add hole vertices
+            if (holes) {
+                for (const hole of holes) {
+                    for (const point of hole) {
+                        const vertex = this.latLonToSphere(point.lat, point.lon, altitude);
+                        positions.push(vertex.x, vertex.y, vertex.z);
+
+                        // Normal points outward from sphere center
+                        const normal = vertex.normalize();
+                        normals.push(normal.x, normal.y, normal.z);
+                    }
+                }
             }
 
             // Create custom mesh
@@ -579,7 +617,7 @@ class EarthGlobe {
         }
     }
 
-    private createExtrudedBorder(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE, countryIndex: number = 0): BABYLON.Mesh | null {
+    private createExtrudedBorder(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE, countryIndex: number = 0, isHole: boolean = false): BABYLON.Mesh | null {
         try {
             // Convert lat/lon points to 3D sphere coordinates (top edge of border)
             const topPoints: BABYLON.Vector3[] = [];
@@ -645,7 +683,10 @@ class EarthGlobe {
                 // Calculate normal (perpendicular to the quad face, pointing outward)
                 const edge1 = nextTop.subtract(top);
                 const edge2 = bottom.subtract(top);
-                const normal = BABYLON.Vector3.Cross(edge1, edge2).normalize();
+                // For holes, reverse the normal direction (inward-facing)
+                const normal = isHole
+                    ? BABYLON.Vector3.Cross(edge2, edge1).normalize()  // Reversed cross product
+                    : BABYLON.Vector3.Cross(edge1, edge2).normalize();
 
                 // Add normals (same for all 4 vertices of the quad)
                 for (let j = 0; j < 4; j++) {
@@ -687,7 +728,7 @@ class EarthGlobe {
         }
     }
 
-    private addPolygon(coordinates: number[], countryIndex: number, borderPath?: BABYLON.Vector3[]): number | null {
+    private addPolygon(coordinates: number[], countryIndex: number, borderPath?: BABYLON.Vector3[], holePolygons?: number[][][]): number | null {
         if (this.polygonsData.length >= MAX_COUNTRIES) {
             console.error("Max polygons reached");
             return null;
@@ -702,7 +743,22 @@ class EarthGlobe {
             });
         }
 
-        const mesh = this.createCountryMesh(latLonPoints, COUNTRY_ALTITUDE);
+        // Convert hole polygons to LatLonPoint arrays
+        const holeLatLonPoints: LatLonPoint[][] = [];
+        if (holePolygons) {
+            for (const holePoly of holePolygons) {
+                const holePoints: LatLonPoint[] = [];
+                for (const point of holePoly) {
+                    holePoints.push({
+                        lat: point[0],
+                        lon: point[1]
+                    });
+                }
+                holeLatLonPoints.push(holePoints);
+            }
+        }
+
+        const mesh = this.createCountryMesh(latLonPoints, COUNTRY_ALTITUDE, holeLatLonPoints);
 
         if (mesh) {
             this.showCountries = true;
@@ -720,14 +776,51 @@ class EarthGlobe {
                 borderLine = this.createCountryBorderLines(latLonPoints, BORDER_LINE_ALTITUDE, countryIndex);
             }
 
-            // Create extruded border walls for this polygon
-            const extrudedBorder = this.createExtrudedBorder(latLonPoints, COUNTRY_ALTITUDE, countryIndex);
+            // Create extruded border walls for this polygon (outer border)
+            const extrudedBorder = this.createExtrudedBorder(latLonPoints, COUNTRY_ALTITUDE, countryIndex, false);
+
+            // Create extruded borders for holes
+            const holeExtrudedBorders: BABYLON.Mesh[] = [];
+            if (holeLatLonPoints && holeLatLonPoints.length > 0) {
+                for (const holePoints of holeLatLonPoints) {
+                    const holeExtruded = this.createExtrudedBorder(holePoints, COUNTRY_ALTITUDE, countryIndex, true);
+                    if (holeExtruded) {
+                        holeExtrudedBorders.push(holeExtruded);
+                    }
+                }
+            }
+
+            // Merge main extruded border with hole borders
+            let finalExtrudedBorder = extrudedBorder;
+            if (extrudedBorder && holeExtrudedBorders.length > 0) {
+                const allExtrudedBorders = [extrudedBorder, ...holeExtrudedBorders];
+                const merged = BABYLON.Mesh.MergeMeshes(
+                    allExtrudedBorders,
+                    true,  // disposeSource
+                    true,  // allow32BitsIndices
+                    undefined,  // meshSubclass
+                    false,  // subdivideWithSubMeshes
+                    false  // multiMultiMaterial
+                );
+                finalExtrudedBorder = merged;
+            } else if (holeExtrudedBorders.length > 0) {
+                // No main border but have hole borders
+                const merged = BABYLON.Mesh.MergeMeshes(
+                    holeExtrudedBorders,
+                    true,
+                    true,
+                    undefined,
+                    false,
+                    false
+                );
+                finalExtrudedBorder = merged;
+            }
 
             // Store polygon data
             const polygonData: PolygonData = {
                 mesh: mesh,
                 borderLine: borderLine,
-                extrudedBorder: extrudedBorder,
+                extrudedBorder: finalExtrudedBorder,
                 borderPoints: latLonPoints,
                 countryIndex: countryIndex
             };
@@ -751,10 +844,23 @@ class EarthGlobe {
             this.borderData = borderData;
             this.segmentData = segmentData;
 
-            const response = await fetch('countries.json');
+            const response = await fetch('countries-with-holes.json');
             const countries = await response.json() as CountryJSON[];
 
             console.log('Loaded', countries.length, 'countries');
+
+            // Build set of enclave countries to skip rendering separately
+            const enclaveISO2Set = new Set<string>();
+            for (const country of countries) {
+                if (country.holes) {
+                    for (const holesInPolygon of country.holes) {
+                        for (const enclaveISO2 of holesInPolygon) {
+                            enclaveISO2Set.add(enclaveISO2);
+                        }
+                    }
+                }
+            }
+            console.log('Found', enclaveISO2Set.size, 'enclave countries:', Array.from(enclaveISO2Set).join(', '));
 
             let addedCount = 0;
             let borderIndex = 0; // Track which border we're using from the binary data
@@ -770,7 +876,8 @@ class EarthGlobe {
                     const countryBorders = this.borderData.countries[addedCount];
 
                     // Process all polygons (including islands) for this country
-                    for (const polygon of paths) {
+                    for (let polyIdx = 0; polyIdx < paths.length; polyIdx++) {
+                        const polygon = paths[polyIdx];
                         if (polygon.length === 0) continue;
 
                         // Check for antimeridian crossing
@@ -795,14 +902,32 @@ class EarthGlobe {
 
                         if (flatCoords.length < 6) continue; // Need at least 3 points
 
+                        // Get holes for this polygon (if any)
+                        const holePolygons: number[][] = [];
+                        if (country.holes && country.holes[polyIdx] && country.holes[polyIdx].length > 0) {
+                            console.log(`  ${country.name_en} polygon ${polyIdx} has holes:`, country.holes[polyIdx]);
+
+                            // Find hole countries and get their polygons
+                            for (const holeISO2 of country.holes[polyIdx]) {
+                                const holeCountry = countries.find(c => c.iso2 === holeISO2);
+                                if (holeCountry && holeCountry.paths) {
+                                    const holePaths = JSON.parse(holeCountry.paths) as number[][][];
+                                    // Add all polygons of the hole country
+                                    for (const holePoly of holePaths) {
+                                        holePolygons.push(holePoly);
+                                    }
+                                }
+                            }
+                        }
+
                         // Get the corresponding border path from binary data
                         const borderPathIndex = polygonIndices.length; // Index within this country's polygons
                         const borderPath = countryBorders && borderPathIndex < countryBorders.borders.length
                             ? countryBorders.borders[borderPathIndex].points
                             : undefined;
 
-                        // Add this polygon with reference to the country and pre-baked border
-                        const polygonIndex = this.addPolygon(flatCoords, this.countriesData.length, borderPath);
+                        // Add this polygon with reference to the country, pre-baked border, and holes
+                        const polygonIndex = this.addPolygon(flatCoords, this.countriesData.length, borderPath, holePolygons);
                         if (polygonIndex !== null) {
                             polygonIndices.push(polygonIndex);
                         }
