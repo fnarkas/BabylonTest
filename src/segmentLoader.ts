@@ -7,7 +7,7 @@
 import * as BABYLON from '@babylonjs/core';
 
 const EARTH_RADIUS = 2.0;
-const BORDER_LINE_ALTITUDE = 0.09;
+const BORDER_LINE_ALTITUDE = 0.08;  // Match COUNTRY_ALTITUDE
 
 export interface Point2D {
     lat: number;
