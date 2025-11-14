@@ -6,6 +6,7 @@ import * as GUI from '@babylonjs/gui';
 import earcut from 'earcut';
 import { loadBorderData, type BorderData } from './borderLoaderWasm';
 import { loadSegments, getSharedSegments, type SegmentData, type Segment3D } from './segmentLoader';
+import { createWaterMaterial } from './waterShader';
 
 // Import shaders
 import animatedVertexShader from './shaders/animated.vertex.glsl?raw';
@@ -103,6 +104,7 @@ class EarthGlobe {
     private segmentAnimationIndices: Map<number, number[]>;  // Map from segment index to array of country indices
     private textureBuffer: Uint8ClampedArray | null;  // Pre-allocated buffer for texture updates
     private tempQuaternion: BABYLON.Quaternion;  // Reusable quaternion to avoid allocations
+    private waterMaterial: BABYLON.ShaderMaterial | null;  // Water shader material for parameter adjustments
 
     constructor() {
         this.canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -142,6 +144,7 @@ class EarthGlobe {
         this.segmentAnimationIndices = new Map();
         this.textureBuffer = null;
         this.tempQuaternion = new BABYLON.Quaternion();
+        this.waterMaterial = null;
 
         // Initialize scene instrumentation for accurate performance metrics
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -230,6 +233,10 @@ class EarthGlobe {
             // Reload scene (R key)
             if (e.key === 'r' || e.key === 'R') {
                 this.reloadScene();
+            }
+            // Toggle water shader controls (W key)
+            if (e.key === 'w' || e.key === 'W') {
+                this.toggleWaterShaderControls();
             }
         });
 
@@ -387,16 +394,13 @@ class EarthGlobe {
         // Create sphere for Earth
         this.earthSphere = BABYLON.MeshBuilder.CreateSphere(
             "earth",
-            { diameter: EARTH_RADIUS * 2, segments: 32 },
+            { diameter: EARTH_RADIUS * 2, segments: 64 },  // Increased segments for smoother water shader
             this.scene
         );
 
-        // Create material and load texture
-        const material = new BABYLON.StandardMaterial("earthMaterial", this.scene);
-        material.diffuseTexture = new BABYLON.Texture("4K_WorldTexture.png", this.scene);
-        material.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-
-        this.earthSphere.material = material;
+        // Apply water shader material
+        this.waterMaterial = createWaterMaterial(this.scene, "OceanDepthMap.png", "earthWaterMaterial");
+        this.earthSphere.material = this.waterMaterial;
     }
 
     private latLonToSphere(lat: number, lon: number, altitude: number = 0): BABYLON.Vector3 {
@@ -1793,6 +1797,151 @@ class EarthGlobe {
         }
         // Don't hide the pin when not over the globe - keep it at last position
         // It will only be hidden when exiting placing mode
+    }
+
+    private toggleWaterShaderControls(): void {
+        if (!this.waterMaterial) return;
+
+        // Check if panel already exists
+        const existingPanel = document.getElementById('waterShaderPanel');
+        if (existingPanel) {
+            existingPanel.remove();
+            return;
+        }
+
+        // Create control panel
+        const panel = document.createElement('div');
+        panel.id = 'waterShaderPanel';
+        panel.style.cssText = `
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            width: 350px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background: rgba(30, 30, 30, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        `;
+
+        const title = document.createElement('h3');
+        title.textContent = 'Water Shader Controls (Press W to close)';
+        title.style.cssText = 'margin: 0 0 15px 0; font-size: 14px;';
+        panel.appendChild(title);
+
+        const createSlider = (label: string, min: number, max: number, step: number, value: number, onChange: (v: number) => void) => {
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-bottom: 12px;';
+
+            const labelEl = document.createElement('div');
+            labelEl.textContent = `${label}: `;
+            labelEl.style.cssText = 'margin-bottom: 4px; display: flex; justify-content: space-between;';
+
+            const valueEl = document.createElement('span');
+            valueEl.textContent = value.toFixed(step < 1 ? 2 : 0);
+            valueEl.style.cssText = 'color: #4CAF50;';
+            labelEl.appendChild(valueEl);
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = min.toString();
+            slider.max = max.toString();
+            slider.step = step.toString();
+            slider.value = value.toString();
+            slider.style.cssText = 'width: 100%;';
+
+            slider.oninput = () => {
+                const v = parseFloat(slider.value);
+                valueEl.textContent = v.toFixed(step < 1 ? 2 : 0);
+                onChange(v);
+            };
+
+            container.appendChild(labelEl);
+            container.appendChild(slider);
+            return container;
+        };
+
+        const createColorPicker = (label: string, r: number, g: number, b: number, onChange: (r: number, g: number, b: number) => void) => {
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-bottom: 12px;';
+
+            const labelEl = document.createElement('div');
+            labelEl.textContent = label;
+            labelEl.style.cssText = 'margin-bottom: 4px;';
+
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            // Convert 0-1 RGB to hex
+            const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+            colorInput.value = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+            colorInput.style.cssText = 'width: 100%; height: 30px; cursor: pointer;';
+
+            colorInput.oninput = () => {
+                const hex = colorInput.value;
+                const r = parseInt(hex.substring(1, 3), 16) / 255;
+                const g = parseInt(hex.substring(3, 5), 16) / 255;
+                const b = parseInt(hex.substring(5, 7), 16) / 255;
+                onChange(r, g, b);
+            };
+
+            container.appendChild(labelEl);
+            container.appendChild(colorInput);
+            return container;
+        };
+
+        // Water Colors
+        panel.appendChild(createColorPicker('Shallow Water Color', 0.4, 0.8, 0.95, (r, g, b) =>
+            this.waterMaterial!.setVector3('shallowColor', new BABYLON.Vector3(r, g, b))));
+        panel.appendChild(createColorPicker('Water Color', 0.1, 0.35, 0.65, (r, g, b) =>
+            this.waterMaterial!.setVector3('waterColor', new BABYLON.Vector3(r, g, b))));
+        panel.appendChild(createColorPicker('Deep Water Color', 0.02, 0.08, 0.25, (r, g, b) =>
+            this.waterMaterial!.setVector3('deepColor', new BABYLON.Vector3(r, g, b))));
+        panel.appendChild(createColorPicker('Caustic Color', 1.0, 1.0, 1.0, (r, g, b) =>
+            this.waterMaterial!.setVector3('causticColor', new BABYLON.Vector3(r, g, b))));
+        panel.appendChild(createColorPicker('Foam Color', 0.7, 0.95, 1.0, (r, g, b) =>
+            this.waterMaterial!.setVector3('foamColor', new BABYLON.Vector3(r, g, b))));
+
+        // Caustics
+        const hr0 = document.createElement('hr');
+        hr0.style.cssText = 'border: none; border-top: 1px solid #555; margin: 15px 0;';
+        panel.appendChild(hr0);
+
+        panel.appendChild(createSlider('Caustic Scale', 50, 400, 10, 200, v => this.waterMaterial!.setFloat('causticScale', v)));
+        panel.appendChild(createSlider('Caustic Strength', 0, 2, 0.1, 0.6, v => this.waterMaterial!.setFloat('causticStrength', v)));
+        panel.appendChild(createSlider('Caustic Speed', 0, 1, 0.01, 0.38, v => this.waterMaterial!.setFloat('causticSpeed', v)));
+        panel.appendChild(createSlider('Caustic Deform', 0, 300, 10, 131, v => this.waterMaterial!.setFloat('causticDeform', v)));
+        panel.appendChild(createSlider('Caustic Deform Scale', 0, 0.2, 0.01, 0.08, v => this.waterMaterial!.setFloat('causticDeformScale', v)));
+
+        // Foam
+        const hr1 = document.createElement('hr');
+        hr1.style.cssText = 'border: none; border-top: 1px solid #555; margin: 15px 0;';
+        panel.appendChild(hr1);
+
+        panel.appendChild(createSlider('Foam Width', 0, 1, 0.01, 0.99, v => this.waterMaterial!.setFloat('foamWidth', v)));
+        panel.appendChild(createSlider('Foam Strength', 0, 100, 1, 40, v => this.waterMaterial!.setFloat('foamStrength', v)));
+        panel.appendChild(createSlider('Foam Noise Scale', 50, 1000, 10, 500, v => this.waterMaterial!.setFloat('foamNoiseScale', v)));
+        panel.appendChild(createSlider('Foam Speed', 0, 0.1, 0.001, 0.03, v => this.waterMaterial!.setFloat('foamNoiseSpeed', v)));
+        panel.appendChild(createSlider('Foam Ripple Width', 0, 1, 0.01, 0.2, v => this.waterMaterial!.setFloat('foamRippleWidth', v)));
+        panel.appendChild(createSlider('Foam Coast', 0, 1, 0.01, 0.39, v => this.waterMaterial!.setFloat('foamCoast', v)));
+        panel.appendChild(createSlider('Foam N Ripples', 0, 10, 1, 3, v => this.waterMaterial!.setFloat('foamNRipples', v)));
+        panel.appendChild(createSlider('Foam UV Strength', 0, 200, 10, 0, v => this.waterMaterial!.setFloat('foamUvStrength', v)));
+
+        // Waves
+        const hr2 = document.createElement('hr');
+        hr2.style.cssText = 'border: none; border-top: 1px solid #555; margin: 15px 0;';
+        panel.appendChild(hr2);
+
+        panel.appendChild(createSlider('Wave Height', 0, 0.2, 0.01, 0, v => this.waterMaterial!.setFloat('waveHeight', v)));
+        panel.appendChild(createSlider('Wave Scale', 0, 20, 1, 9, v => this.waterMaterial!.setFloat('waveScale', v)));
+        panel.appendChild(createSlider('Wave Speed', 0, 0.01, 0.0001, 0.001, v => this.waterMaterial!.setFloat('waveSpeed', v)));
+
+        document.body.appendChild(panel);
+        console.log('Water shader controls opened - Press W to close');
     }
 
 }
