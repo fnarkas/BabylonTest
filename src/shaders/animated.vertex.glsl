@@ -3,6 +3,7 @@ precision highp float;
 // Attributes
 attribute vec3 position;
 attribute vec3 normal;
+attribute vec2 uv;
 attribute float countryIndex;
 
 // Uniforms
@@ -21,9 +22,12 @@ void main(void) {
     float animValue = texture2D(animationTexture, vec2(texCoord, 0.5)).r;
 
     // Apply animation - scale outward from center
+    // For extruded borders: uv.y = 0 (bottom) stays fixed, uv.y = 1 (top) animates
+    // For country meshes: uv.y is typically 0 or undefined, so they fully animate
     vec3 animatedPosition = position;
     vec3 centerDir = normalize(position);
-    animatedPosition += centerDir * animValue * animationAmplitude;
+    float topFactor = uv.y;  // 0 = bottom (fixed), 1 = top (animates)
+    animatedPosition += centerDir * animValue * animationAmplitude * topFactor;
 
     gl_Position = worldViewProjection * vec4(animatedPosition, 1.0);
 

@@ -6,6 +6,8 @@ import * as GUI from '@babylonjs/gui';
 import { cdt2d, filterTriangles } from './cdt2d';
 import { loadSegments, getSharedSegments, type SegmentData, type Segment3D } from './segmentLoader';
 import { createWaterMaterial } from './waterShader';
+import { CountryPicker, calculateBoundingBox, cartesianToLatLon, type CountryPolygon, type LatLon } from './countryPicker';
+import { CountrySelectionBehavior } from './countrySelectionBehavior';
 
 // Import shaders
 import animatedVertexShader from './shaders/animated.vertex.glsl?raw';
@@ -105,6 +107,11 @@ class EarthGlobe {
     private textureBuffer: Uint8ClampedArray | null;  // Pre-allocated buffer for texture updates
     private tempQuaternion: BABYLON.Quaternion;  // Reusable quaternion to avoid allocations
     private waterMaterial: BABYLON.ShaderMaterial | null;  // Water shader material for parameter adjustments
+    private countryPicker: CountryPicker;  // Spatial index for fast country lookup from lat/lon
+    private hoveredCountry: CountryPolygon | null;  // Currently hovered country (during pin placement)
+    private onCountrySelected: ((country: CountryPolygon | null, latLon: LatLon) => void) | null;  // Callback for country selection (pin placed)
+    private onCountryHovered: ((country: CountryPolygon | null, latLon: LatLon) => void) | null;  // Callback for country hover (during pin placement)
+    private selectionBehavior: CountrySelectionBehavior | null;  // Handles visual feedback for country selection
 
     constructor() {
         this.canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -145,6 +152,11 @@ class EarthGlobe {
         this.textureBuffer = null;
         this.tempQuaternion = new BABYLON.Quaternion();
         this.waterMaterial = null;
+        this.countryPicker = new CountryPicker(10);  // 10° grid cells
+        this.hoveredCountry = null;
+        this.onCountrySelected = null;
+        this.onCountryHovered = null;
+        this.selectionBehavior = null;  // Will be created after GUI
 
         // Initialize scene instrumentation for accurate performance metrics
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -152,6 +164,81 @@ class EarthGlobe {
 
         this.init();
     }
+
+    // =========================================================================
+    // Public API
+    // =========================================================================
+
+    /**
+     * Set a callback to be called when a country is selected (pin placed on it)
+     * @param callback Function called with the country info and lat/lon, or null if over ocean
+     */
+    public setCountrySelectedCallback(callback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null): void {
+        this.onCountrySelected = callback;
+    }
+
+    /**
+     * Set a callback to be called when hovering over a country (during pin placement mode)
+     * @param callback Function called with the country info and lat/lon, or null if over ocean
+     */
+    public setCountryHoveredCallback(callback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null): void {
+        this.onCountryHovered = callback;
+    }
+
+    /**
+     * Get the country at the given lat/lon coordinates
+     * @param lat Latitude in degrees
+     * @param lon Longitude in degrees
+     * @returns The country at that location, or null if over ocean
+     */
+    public getCountryAtLatLon(lat: number, lon: number): CountryPolygon | null {
+        return this.countryPicker.pickCountry({ lat, lon });
+    }
+
+    /**
+     * Get the currently hovered country (during pin placement mode)
+     * @returns The currently hovered country, or null
+     */
+    public getHoveredCountry(): CountryPolygon | null {
+        return this.hoveredCountry;
+    }
+
+    /**
+     * Get country data by ISO2 code
+     * @param iso2 The two-letter country code (e.g., "US", "DE")
+     * @returns The country data, or undefined if not found
+     */
+    public getCountryByISO2(iso2: string): CountryData | undefined {
+        return this.countriesData.find(c => c.iso2 === iso2);
+    }
+
+    /**
+     * Set the altitude (extrusion) value for a country
+     * @param countryIndex The index of the country in countriesData
+     * @param altitude Value between 0 and 1 (0 = no extrusion, 1 = max extrusion)
+     */
+    public setCountryAltitude(countryIndex: number, altitude: number): void {
+        if (countryIndex >= 0 && countryIndex < this.animationData.length) {
+            this.animationData[countryIndex] = Math.max(0, Math.min(1, altitude));
+            this.updateAnimationTexture();
+        }
+    }
+
+    /**
+     * Get the current altitude value for a country
+     * @param countryIndex The index of the country
+     * @returns The altitude value (0-1)
+     */
+    public getCountryAltitude(countryIndex: number): number {
+        if (countryIndex >= 0 && countryIndex < this.animationData.length) {
+            return this.animationData[countryIndex];
+        }
+        return 0;
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
 
     private async init(): Promise<void> {
         this.updateLoadingProgress(5, 'Initializing scene...');
@@ -214,6 +301,20 @@ class EarthGlobe {
 
         // Create GUI
         this.createGUI();
+
+        // Create country selection behavior (uses advancedTexture from createGUI)
+        if (this.advancedTexture) {
+            this.selectionBehavior = new CountrySelectionBehavior(
+                this.scene,
+                this.advancedTexture,
+                (countryIndex, altitude) => this.setCountryAltitude(countryIndex, altitude),
+                (countryIndex) => this.getCountryAltitude(countryIndex)
+            );
+            // Wire up hover callback for visual feedback during pin placement
+            this.setCountryHoveredCallback((country, latLon) => {
+                this.selectionBehavior?.onCountrySelected(country, latLon);
+            });
+        }
 
         // Setup drag-and-drop pin placement
         this.setupPinDragAndDrop();
@@ -381,6 +482,9 @@ class EarthGlobe {
         this.previewPin = null;
         this.isPlacingMode = false;
         this.tempQuaternion = new BABYLON.Quaternion();
+        this.countryPicker = new CountryPicker(10);
+        this.hoveredCountry = null;
+        // Note: Keep onCountrySelected callback across reloads
 
         // Reinitialize
         this.sceneInstrumentation = new BABYLON.SceneInstrumentation(this.scene);
@@ -610,6 +714,7 @@ class EarthGlobe {
             // Convert lat/lon points to 3D sphere coordinates
             const positions: number[] = [];
             const normals: number[] = [];
+            const uvs: number[] = [];
 
             for (const point of finalVertices) {
                 const vertex = this.latLonToSphere(point.lat, point.lon, altitude);
@@ -618,6 +723,9 @@ class EarthGlobe {
                 // Normal points outward from sphere center
                 const normal = vertex.normalize();
                 normals.push(normal.x, normal.y, normal.z);
+
+                // UV with v=1 so country surfaces animate fully (top of extrusion)
+                uvs.push(0, 1);
             }
 
             // Create custom mesh
@@ -627,6 +735,7 @@ class EarthGlobe {
             vertexData.positions = positions;
             vertexData.indices = finalIndices;
             vertexData.normals = normals;
+            vertexData.uvs = uvs;
 
             vertexData.applyToMesh(customMesh);
 
@@ -945,11 +1054,13 @@ class EarthGlobe {
                             continue;
                         }
 
-                        // Flatten coordinates
+                        // Flatten coordinates and build lat/lon points for picker
                         const flatCoords: number[] = [];
+                        const latLonPoints: LatLon[] = [];
                         for (const point of polygon) {
                             flatCoords.push(point[0]); // lat
                             flatCoords.push(point[1]); // lon
+                            latLonPoints.push({ lat: point[0], lon: point[1] });
                         }
 
                         if (flatCoords.length < 6) continue; // Need at least 3 points
@@ -989,6 +1100,16 @@ class EarthGlobe {
                         const polygonIndex = this.addPolygon(flatCoords, this.countriesData.length, holePolygons, country.iso2);
                         if (polygonIndex !== null) {
                             polygonIndices.push(polygonIndex);
+
+                            // Add to spatial index for picking
+                            this.countryPicker.addPolygon({
+                                iso2: country.iso2,
+                                name: country.name_en,
+                                countryIndex: this.countriesData.length,
+                                polygonIndex: polyIdx,
+                                points: latLonPoints,
+                                bbox: calculateBoundingBox(latLonPoints)
+                            });
                         }
                     }
 
@@ -1012,6 +1133,10 @@ class EarthGlobe {
             }
 
             console.log(`Generated ${addedCount} countries with ${this.polygonsData.length} polygons, ${this.totalTriangleCount} triangles in ${(performance.now() - meshGenStartTime).toFixed(2)}ms`);
+
+            // Log country picker stats
+            const pickerStats = this.countryPicker.getStats();
+            console.log(`Country picker: ${pickerStats.polygonCount} polygons in ${pickerStats.cellCount} grid cells (avg ${pickerStats.avgPolygonsPerCell.toFixed(1)} per cell)`);
 
             // Create animation texture before merging
             const animTexStartTime = performance.now();
@@ -1198,7 +1323,7 @@ class EarthGlobe {
                 vertex: name,
                 fragment: name,
             }, {
-                attributes: ["position", "normal", "countryIndex"],
+                attributes: ["position", "normal", "uv", "countryIndex"],
                 uniforms: ["worldViewProjection", "world", "animationTextureWidth", "animationAmplitude", ...uniforms],
                 samplers: ["animationTexture"]
             });
@@ -1697,11 +1822,30 @@ class EarthGlobe {
         }
 
         if (placePin) {
-            console.log('Pin placed at current position');
+            // Call the country selected callback if set
+            if (this.onCountrySelected && this.previewPin) {
+                const pinPos = this.previewPin.position;
+                const latLon = cartesianToLatLon(pinPos.x, pinPos.y, pinPos.z);
+                const country = this.countryPicker.pickCountry(latLon);
+                this.onCountrySelected(country, latLon);
+
+                if (country) {
+                    console.log(`Pin placed in ${country.name} (${country.iso2}) at lat: ${latLon.lat.toFixed(4)}, lon: ${latLon.lon.toFixed(4)}`);
+                } else {
+                    console.log(`Pin placed in ocean at lat: ${latLon.lat.toFixed(4)}, lon: ${latLon.lon.toFixed(4)}`);
+                }
+            } else {
+                console.log('Pin placed at current position');
+            }
         } else {
             console.log('Pin placement cancelled');
         }
 
+        // Clear hovered country and deselect when exiting placing mode
+        if (this.hoveredCountry && this.selectionBehavior) {
+            this.selectionBehavior.deselectCurrent();
+        }
+        this.hoveredCountry = null;
         console.log('Exited placing mode');
     }
 
@@ -1801,6 +1945,12 @@ class EarthGlobe {
     }
 
     private recreateGUI(): void {
+        // Dispose old selection behavior (it has GUI elements)
+        if (this.selectionBehavior) {
+            this.selectionBehavior.dispose();
+            this.selectionBehavior = null;
+        }
+
         // Dispose old GUI
         if (this.advancedTexture) {
             this.advancedTexture.dispose();
@@ -1811,6 +1961,19 @@ class EarthGlobe {
 
         // Recreate GUI with new dimensions
         this.createGUI();
+
+        // Recreate selection behavior
+        if (this.advancedTexture) {
+            this.selectionBehavior = new CountrySelectionBehavior(
+                this.scene,
+                this.advancedTexture,
+                (countryIndex, altitude) => this.setCountryAltitude(countryIndex, altitude),
+                (countryIndex) => this.getCountryAltitude(countryIndex)
+            );
+            this.setCountryHoveredCallback((country, latLon) => {
+                this.selectionBehavior?.onCountrySelected(country, latLon);
+            });
+        }
 
         // Re-setup pin drag and drop event handlers
         this.setupPinDragAndDrop();
@@ -1847,6 +2010,33 @@ class EarthGlobe {
                 this.tempQuaternion
             );
             this.previewPin.rotationQuaternion = this.tempQuaternion;
+
+            // Detect which country the pin is over
+            const pickedPoint = pickResult.pickedPoint;
+            const latLon = cartesianToLatLon(pickedPoint.x, pickedPoint.y, pickedPoint.z);
+            const country = this.countryPicker.pickCountry(latLon);
+
+            // Check if hovered country changed
+            const previousHovered = this.hoveredCountry;
+            const countryChanged = country?.iso2 !== previousHovered?.iso2;
+
+            if (country) {
+                this.hoveredCountry = country;
+            } else {
+                this.hoveredCountry = null;
+            }
+
+            // Call hover callback if country changed
+            if (countryChanged && this.onCountryHovered) {
+                this.onCountryHovered(country, latLon);
+            }
+        } else {
+            // Not over globe - clear hover if was previously hovering
+            if (this.hoveredCountry && this.onCountryHovered) {
+                const latLon = cartesianToLatLon(0, 0, 0); // Dummy latLon
+                this.onCountryHovered(null, latLon);
+            }
+            this.hoveredCountry = null;
         }
         // Don't hide the pin when not over the globe - keep it at last position
         // It will only be hidden when exiting placing mode
@@ -2002,4 +2192,10 @@ class EarthGlobe {
 // Initialize the application when page loads
 window.addEventListener('DOMContentLoaded', () => {
     const app = new EarthGlobe();
+    // Make the app accessible globally for debugging and external use
+    (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = app;
 });
+
+// Export types and class for external use
+export { EarthGlobe };
+export type { CountryPolygon, LatLon } from './countryPicker';
