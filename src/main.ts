@@ -66,7 +66,8 @@ interface CountryJSON {
     name_en: string;
     iso2: string;
     paths: string;
-    holes?: string[][];  // Array of hole ISO2 codes per polygon
+    holes?: string[][];  // Array of hole ISO2 codes per polygon (enclaves)
+    lakes?: number[][];  // For each polygon, list of polygon indices that are lakes inside it
 }
 
 class EarthGlobe {
@@ -755,19 +756,23 @@ class EarthGlobe {
 
     private async loadCountries(): Promise<void> {
         try {
+            const totalStartTime = performance.now();
+
             // Load segments data
+            const segmentsStartTime = performance.now();
             this.segmentData = await loadSegments('segments.json');
+            console.log(`Loaded segments in ${(performance.now() - segmentsStartTime).toFixed(2)}ms`);
 
-            const response = await fetch('countries-with-holes.json');
+            const fetchStartTime = performance.now();
+            const response = await fetch('countries-enriched.json');
             const countries = await response.json() as CountryJSON[];
-
-            console.log('Loaded', countries.length, 'countries');
+            console.log(`Fetched ${countries.length} countries in ${(performance.now() - fetchStartTime).toFixed(2)}ms`);
 
             // Build set of enclave countries to skip rendering separately
             const enclaveISO2Set = new Set<string>();
             for (const country of countries) {
                 if (country.holes) {
-                    for (const holesInPolygon of country.holes) {
+                    for (const holesInPolygon of Object.values(country.holes)) {
                         for (const enclaveISO2 of holesInPolygon) {
                             enclaveISO2Set.add(enclaveISO2);
                         }
@@ -779,6 +784,7 @@ class EarthGlobe {
             let addedCount = 0;
             let borderIndex = 0; // Track which border we're using from the binary data
 
+            const meshGenStartTime = performance.now();
             for (const country of countries) {
                 if (!country.paths || country.paths === '[]') continue;
 
@@ -786,8 +792,21 @@ class EarthGlobe {
                     const paths = JSON.parse(country.paths) as number[][][];
                     const polygonIndices: number[] = [];
 
+                    // Build set of lake polygon indices (these will be rendered as holes, not standalone)
+                    const lakePolygonIndices = new Set<number>();
+                    if (country.lakes) {
+                        for (const lakeIndices of Object.values(country.lakes)) {
+                            for (const lakeIdx of lakeIndices) {
+                                lakePolygonIndices.add(lakeIdx);
+                            }
+                        }
+                    }
+
                     // Process all polygons (including islands) for this country
                     for (let polyIdx = 0; polyIdx < paths.length; polyIdx++) {
+                        // Skip polygons that are lakes (they'll be added as holes to their parent)
+                        if (lakePolygonIndices.has(polyIdx)) continue;
+
                         const polygon = paths[polyIdx];
                         if (polygon.length === 0) continue;
 
@@ -815,11 +834,14 @@ class EarthGlobe {
 
                         // Get holes for this polygon (if any)
                         const holePolygons: number[][][] = [];
-                        if (country.holes && country.holes[polyIdx] && country.holes[polyIdx].length > 0) {
-                            console.log(`  ${country.name_en} polygon ${polyIdx} has holes:`, country.holes[polyIdx]);
+
+                        // Add enclave holes (other countries inside this one)
+                        const holesForPolygon = country.holes?.[polyIdx];
+                        if (holesForPolygon && holesForPolygon.length > 0) {
+                            console.log(`  ${country.name_en} polygon ${polyIdx} has enclave holes:`, holesForPolygon);
 
                             // Find hole countries and get their polygons
-                            for (const holeISO2 of country.holes[polyIdx]) {
+                            for (const holeISO2 of holesForPolygon) {
                                 const holeCountry = countries.find(c => c.iso2 === holeISO2);
                                 if (holeCountry && holeCountry.paths) {
                                     const holePaths = JSON.parse(holeCountry.paths) as number[][][];
@@ -827,6 +849,19 @@ class EarthGlobe {
                                     for (const holePoly of holePaths) {
                                         holePolygons.push(holePoly);
                                     }
+                                }
+                            }
+                        }
+
+                        // Add lake holes (polygons within this polygon in the same country)
+                        const lakesForPolygon = country.lakes?.[polyIdx];
+                        if (lakesForPolygon && lakesForPolygon.length > 0) {
+                            console.log(`  ${country.name_en} polygon ${polyIdx} has lake holes:`, lakesForPolygon);
+
+                            for (const lakeIdx of lakesForPolygon) {
+                                const lakePoly = paths[lakeIdx];
+                                if (lakePoly && lakePoly.length >= 3) {
+                                    holePolygons.push(lakePoly);
                                 }
                             }
                         }
@@ -857,20 +892,28 @@ class EarthGlobe {
                 }
             }
 
-            console.log('Added', addedCount, 'countries with', this.polygonsData.length, 'total polygons');
+            console.log(`Generated ${addedCount} countries with ${this.polygonsData.length} polygons in ${(performance.now() - meshGenStartTime).toFixed(2)}ms`);
 
             // Create animation texture before merging
+            const animTexStartTime = performance.now();
             this.createAnimationTexture();
+            console.log(`Created animation texture in ${(performance.now() - animTexStartTime).toFixed(2)}ms`);
 
             // Merge all meshes for performance
+            const mergeStartTime = performance.now();
             this.mergeCountryPolygons();
             this.mergeExtrudedBorders();
+            console.log(`Merged meshes in ${(performance.now() - mergeStartTime).toFixed(2)}ms`);
 
             // Render segment borders (international borders only)
+            const segmentBordersStartTime = performance.now();
             this.renderSegmentBorders();
+            console.log(`Rendered segment borders in ${(performance.now() - segmentBordersStartTime).toFixed(2)}ms`);
 
             // Detect neighbors after all countries are loaded
             this.detectNeighbors();
+
+            console.log(`Total loadCountries time: ${(performance.now() - totalStartTime).toFixed(2)}ms`);
 
             const statusElement = document.getElementById('status');
             if (statusElement) {

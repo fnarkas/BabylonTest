@@ -77,7 +77,14 @@
     "continent": "South America",
     "name": "Argentina",
     "name_en": "Argentina",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "1": [
+        2,
+        3,
+        4
+      ]
+    }
   },
   {
     "iso2": "AS",
@@ -301,7 +308,25 @@
     "continent": "North America",
     "name": "Kanada",
     "name_en": "Canada",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "10": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "14": [
+        38,
+        39
+      ],
+      "29": [
+        37
+      ]
+    }
   },
   {
     "iso2": "CC",
@@ -381,7 +406,13 @@
     "continent": "Asia",
     "name": "Kina",
     "name_en": "China",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "1": [
+        2,
+        3
+      ]
+    }
   },
   {
     "iso2": "CO",
@@ -542,16 +573,11 @@
     "name": "Spanien",
     "name_en": "Spain",
     "is_sovereign": true,
-    "holes": [
-      [
+    "holes": {
+      "0": [
         "GI"
-      ],
-      [],
-      [],
-      [],
-      [],
-      []
-    ]
+      ]
+    }
   },
   {
     "iso2": "ET",
@@ -623,7 +649,13 @@
     "continent": "Europe",
     "name": "Storbritannien",
     "name_en": "United Kingdom",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "2": [
+        3,
+        4
+      ]
+    }
   },
   {
     "iso2": "GD",
@@ -888,15 +920,12 @@
     "name": "Italien",
     "name_en": "Italy",
     "is_sovereign": true,
-    "holes": [
-      [],
-      [],
-      [
+    "holes": {
+      "2": [
         "SM",
         "VA"
-      ],
-      []
-    ]
+      ]
+    }
   },
   {
     "iso2": "JE",
@@ -928,7 +957,12 @@
     "continent": "Asia",
     "name": "Japan",
     "name_en": "Japan",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "1": [
+        34
+      ]
+    }
   },
   {
     "iso2": "KE",
@@ -936,7 +970,12 @@
     "continent": "Africa",
     "name": "Kenya",
     "name_en": "Kenya",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "0": [
+        1
+      ]
+    }
   },
   {
     "iso2": "KG",
@@ -1016,7 +1055,12 @@
     "continent": "Asia",
     "name": "Kazakstan",
     "name_en": "Kazakhstan",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "0": [
+        1
+      ]
+    }
   },
   {
     "iso2": "LA",
@@ -1281,12 +1325,11 @@
     "name": "Malaysia",
     "name_en": "Malaysia",
     "is_sovereign": true,
-    "holes": [
-      [
+    "holes": {
+      "0": [
         "SG"
-      ],
-      []
-    ]
+      ]
+    }
   },
   {
     "iso2": "MZ",
@@ -1550,7 +1593,14 @@
     "continent": "Asia",
     "name": "Ryssland",
     "name_en": "Russia",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "3": [
+        13,
+        14,
+        15
+      ]
+    }
   },
   {
     "iso2": "RW",
@@ -1598,7 +1648,13 @@
     "continent": "Europe",
     "name": "Sverige",
     "name_en": "Sweden",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "0": [
+        3,
+        4
+      ]
+    }
   },
   {
     "iso2": "SG",
@@ -1782,7 +1838,15 @@
     "continent": "",
     "name": "Tokelauöarna",
     "name_en": "Tokelau",
-    "is_sovereign": false
+    "is_sovereign": false,
+    "lakes": {
+      "0": [
+        4
+      ],
+      "1": [
+        3
+      ]
+    }
   },
   {
     "iso2": "TL",
@@ -1886,7 +1950,12 @@
     "continent": "North America",
     "name": "USA",
     "name_en": "United States of America",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "lakes": {
+      "5": [
+        15
+      ]
+    }
   },
   {
     "iso2": "UY",
@@ -2007,11 +2076,11 @@
     "name": "Sydafrika",
     "name_en": "South Africa",
     "is_sovereign": true,
-    "holes": [
-      [
+    "holes": {
+      "0": [
         "LS"
       ]
-    ]
+    }
   },
   {
     "iso2": "ZM",

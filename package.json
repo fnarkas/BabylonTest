@@ -11,7 +11,7 @@
     "test:segments": "tsx scripts/test-segment-loader.ts",
     "generate-borders": "node scripts/generate_borders.mjs",
     "generate-segments": "tsx scripts/generate-segments.ts",
-    "detect-enclaves": "tsx scripts/detect-enclaves.ts"
+    "enrich-countries": "tsx scripts/enrich-countries.ts"
   },
   "devDependencies": {
     "@babylonjs/inspector": "^7.54.3",
