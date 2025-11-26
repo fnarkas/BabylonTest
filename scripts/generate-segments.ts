@@ -8,8 +8,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const EPSILON = 0.0001; // Tolerance for comparing lat/lon coordinates (roughly ~10 meters)
-const MIN_SEGMENT_LENGTH = 3; // Minimum points for a valid segment
+const EPSILON = 0.002; // Tolerance for comparing lat/lon coordinates (roughly ~200 meters, needed for data inconsistencies)
+const MIN_SEGMENT_LENGTH = 2; // Minimum points for a valid segment (2 = line between two shared vertices)
 
 interface Point2D {
     lat: number;
