@@ -23,7 +23,6 @@
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/gui": "^7.54.3",
-    "@babylonjs/loaders": "^7.54.3",
-    "earcut": "^2.2.4"
+    "@babylonjs/loaders": "^7.54.3"
   }
 }

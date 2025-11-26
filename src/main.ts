@@ -3,7 +3,7 @@ import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 import '@babylonjs/inspector';
 import * as GUI from '@babylonjs/gui';
-import earcut from 'earcut';
+import { cdt2d, filterTriangles } from './cdt2d';
 import { loadSegments, getSharedSegments, type SegmentData, type Segment3D } from './segmentLoader';
 import { createWaterMaterial } from './waterShader';
 
@@ -35,6 +35,7 @@ const COUNTRY_HSV_SATURATION = 0.7;
 const COUNTRY_HSV_VALUE = 0.9;
 const BORDER_COLOR_WHITE = new BABYLON.Color3(1, 1, 1);
 const BORDER_COLOR_GRAY = new BABYLON.Color3(0.9, 0.9, 0.9);
+
 
 interface LatLonPoint {
     lat: number;
@@ -78,6 +79,7 @@ class EarthGlobe {
     private earthSphere: BABYLON.Mesh;
     private polygonsData: PolygonData[];  // Flat array of all polygons
     private countriesData: CountryData[];  // Country-level metadata
+    private totalTriangleCount: number;  // Track total triangles for comparison
     private mergedCountries: BABYLON.Mesh | null;  // Single merged mesh for all country polygons
     private mergedExtrudedBorders: BABYLON.Mesh | null;  // Single merged mesh for all extruded borders
     private animationTexture: BABYLON.DynamicTexture | null;  // Texture storing animation values per country
@@ -118,6 +120,7 @@ class EarthGlobe {
         this.earthSphere = null!; // Will be created in createEarthSphere()
         this.polygonsData = [];
         this.countriesData = [];
+        this.totalTriangleCount = 0;
         this.mergedCountries = null;
         this.mergedExtrudedBorders = null;
         this.animationTexture = null;
@@ -364,6 +367,7 @@ class EarthGlobe {
         this.earthSphere = null!;
         this.polygonsData = [];
         this.countriesData = [];
+        this.totalTriangleCount = 0;
         this.mergedCountries = null;
         this.mergedExtrudedBorders = null;
         this.animationTexture = null;
@@ -415,36 +419,154 @@ class EarthGlobe {
         return new BABYLON.Vector3(x, y, z);
     }
 
-    private triangulatePolygon(points: { x: number; y: number }[], holes?: { x: number; y: number }[][]): number[] {
-        // Use earcut library for triangulation
-        // Flatten the 2D coordinates for earcut (outer ring + holes)
-        const flatCoords: number[] = [];
+    /**
+     * Point-in-polygon test using ray casting algorithm
+     */
+    private pointInPolygon2D(point: { x: number; y: number }, polygon: { x: number; y: number }[]): boolean {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i].x, yi = polygon[i].y;
+            const xj = polygon[j].x, yj = polygon[j].y;
 
-        // Add outer ring
-        for (const point of points) {
-            flatCoords.push(point.x, point.y);
+            if (((yi > point.y) !== (yj > point.y)) &&
+                (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
+    /**
+     * Generate interior grid points for a polygon to improve triangulation on curved surfaces.
+     * Returns points in lat/lon coordinates.
+     */
+    private generateInteriorPoints(
+        latLonPoints: LatLonPoint[],
+        holes: LatLonPoint[][] | undefined,
+        gridSpacing: number = 5 // degrees
+    ): LatLonPoint[] {
+        // Calculate bounding box
+        let minLat = Infinity, maxLat = -Infinity;
+        let minLon = Infinity, maxLon = -Infinity;
+        for (const p of latLonPoints) {
+            minLat = Math.min(minLat, p.lat);
+            maxLat = Math.max(maxLat, p.lat);
+            minLon = Math.min(minLon, p.lon);
+            maxLon = Math.max(maxLon, p.lon);
         }
 
-        // Track where each hole starts
-        const holeIndices: number[] = [];
+        // Convert polygon and holes to simple 2D format for point-in-polygon test
+        const poly2D = latLonPoints.map(p => ({ x: p.lon, y: p.lat }));
+        const holes2D = holes ? holes.map(h => h.map(p => ({ x: p.lon, y: p.lat }))) : [];
 
-        // Add holes
-        if (holes && holes.length > 0) {
-            for (const hole of holes) {
-                // Record the starting vertex index of this hole
-                holeIndices.push(flatCoords.length / 2);
+        const interiorPoints: LatLonPoint[] = [];
 
-                // Add hole vertices
-                for (const point of hole) {
-                    flatCoords.push(point.x, point.y);
+        // Generate grid points
+        for (let lat = minLat + gridSpacing; lat < maxLat; lat += gridSpacing) {
+            for (let lon = minLon + gridSpacing; lon < maxLon; lon += gridSpacing) {
+                const testPoint = { x: lon, y: lat };
+
+                // Check if point is inside the outer polygon
+                if (!this.pointInPolygon2D(testPoint, poly2D)) continue;
+
+                // Check if point is inside any hole
+                let inHole = false;
+                for (const hole of holes2D) {
+                    if (this.pointInPolygon2D(testPoint, hole)) {
+                        inHole = true;
+                        break;
+                    }
                 }
+                if (inHole) continue;
+
+                interiorPoints.push({ lat, lon });
             }
         }
 
-        // Triangulate using earcut with holes
-        const indices = earcut(flatCoords, holeIndices.length > 0 ? holeIndices : undefined, 2);
+        return interiorPoints;
+    }
 
-        return indices;
+    /**
+     * Triangulate polygon using cdt2d (Constrained Delaunay Triangulation)
+     * Supports Steiner points for better triangulation of large polygons
+     */
+    private triangulateWithCDT(
+        points: { x: number; y: number }[],
+        holes?: { x: number; y: number }[][],
+        steinerPoints?: { x: number; y: number }[]
+    ): { vertices: { x: number; y: number }[]; indices: number[] } | null {
+        try {
+            // Build vertex array: boundary + holes + Steiner points
+            const vertices: [number, number][] = [];
+            const edges: [number, number][] = [];
+
+            // Add boundary vertices and edges
+            const boundaryStart = vertices.length;
+            for (const p of points) {
+                vertices.push([p.x, p.y]);
+            }
+            // Create boundary edges (closed loop)
+            for (let i = 0; i < points.length; i++) {
+                edges.push([boundaryStart + i, boundaryStart + ((i + 1) % points.length)]);
+            }
+
+            // Store hole polygons for later filtering
+            const holePolygons: [number, number][][] = [];
+
+            // Add hole vertices and edges
+            if (holes && holes.length > 0) {
+                for (const hole of holes) {
+                    if (hole.length >= 3) {
+                        const holeStart = vertices.length;
+                        const holeVertices: [number, number][] = [];
+                        for (const p of hole) {
+                            vertices.push([p.x, p.y]);
+                            holeVertices.push([p.x, p.y]);
+                        }
+                        holePolygons.push(holeVertices);
+                        // Create hole edges (closed loop)
+                        for (let i = 0; i < hole.length; i++) {
+                            edges.push([holeStart + i, holeStart + ((i + 1) % hole.length)]);
+                        }
+                    }
+                }
+            }
+
+            // Add Steiner points (no edges for these - they're interior points)
+            if (steinerPoints && steinerPoints.length > 0) {
+                for (const sp of steinerPoints) {
+                    vertices.push([sp.x, sp.y]);
+                }
+            }
+
+            // Run constrained Delaunay triangulation (returns ALL triangles including exterior)
+            let triangles = cdt2d(vertices, edges);
+
+            // Get boundary as array of [x,y] tuples for filtering
+            const boundaryForFilter: [number, number][] = points.map(p => [p.x, p.y]);
+
+            // Filter to keep only triangles inside boundary and outside holes
+            triangles = filterTriangles(
+                vertices,
+                triangles,
+                boundaryForFilter,
+                holePolygons.length > 0 ? holePolygons : undefined
+            );
+
+            // Convert to flat indices
+            const indices: number[] = [];
+            for (const tri of triangles) {
+                indices.push(tri[0], tri[1], tri[2]);
+            }
+
+            // Convert vertices back to {x, y} format
+            const verticesXY = vertices.map(v => ({ x: v[0], y: v[1] }));
+
+            return { vertices: verticesXY, indices };
+        } catch (error) {
+            console.error('cdt2d triangulation failed:', error);
+            return null;
+        }
     }
 
     private createCountryMesh(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE, holes?: LatLonPoint[][]): BABYLON.Mesh | null {
@@ -454,33 +576,41 @@ class EarthGlobe {
         }
 
         try {
-            // Convert lat/lon points to 2D for triangulation (use as-is)
-            const points2D = latLonPoints.map(p => ({ x: p.lat, y: p.lon }));
+            // Use simple lat/lon as 2D coordinates for triangulation
+            const points2D = latLonPoints.map(p => ({ x: p.lon, y: p.lat }));
 
             // Convert holes to 2D
-            const holes2D = holes ? holes.map(hole => hole.map(p => ({ x: p.lat, y: p.lon }))) : [];
+            const holes2D = holes ? holes.map(hole => hole.map(p => ({ x: p.lon, y: p.lat }))) : [];
 
-            // Triangulate with holes
-            const indices = this.triangulatePolygon(points2D, holes2D);
+            // Use cdt2d with Steiner points for better triangulation
+            const steinerPoints2D = this.generateInteriorPoints(latLonPoints, holes, 5)
+                .map(p => ({ x: p.lon, y: p.lat }));
 
-            if (!indices || indices.length === 0) {
-                console.error("Triangulation failed");
+            const cdtResult = this.triangulateWithCDT(points2D, holes2D, steinerPoints2D);
+
+            if (!cdtResult || cdtResult.indices.length === 0) {
+                console.error("CDT triangulation failed for polygon with", latLonPoints.length, "points and", holes?.length || 0, "holes");
                 return null;
             }
 
+            // Convert cdt2d vertices back to lat/lon
+            const finalVertices = cdtResult.vertices.map(v => ({ lat: v.y, lon: v.x }));
+
             // Reverse winding order for outward-facing triangles
-            const reversedIndices: number[] = [];
-            for (let i = 0; i < indices.length; i += 3) {
-                reversedIndices.push(indices[i + 2], indices[i + 1], indices[i]);
+            const finalIndices: number[] = [];
+            for (let i = 0; i < cdtResult.indices.length; i += 3) {
+                finalIndices.push(
+                    cdtResult.indices[i + 2],
+                    cdtResult.indices[i + 1],
+                    cdtResult.indices[i]
+                );
             }
 
             // Convert lat/lon points to 3D sphere coordinates
-            // Include both outer ring and hole vertices
             const positions: number[] = [];
             const normals: number[] = [];
 
-            // Add outer ring vertices
-            for (const point of latLonPoints) {
+            for (const point of finalVertices) {
                 const vertex = this.latLonToSphere(point.lat, point.lon, altitude);
                 positions.push(vertex.x, vertex.y, vertex.z);
 
@@ -489,29 +619,18 @@ class EarthGlobe {
                 normals.push(normal.x, normal.y, normal.z);
             }
 
-            // Add hole vertices
-            if (holes) {
-                for (const hole of holes) {
-                    for (const point of hole) {
-                        const vertex = this.latLonToSphere(point.lat, point.lon, altitude);
-                        positions.push(vertex.x, vertex.y, vertex.z);
-
-                        // Normal points outward from sphere center
-                        const normal = vertex.normalize();
-                        normals.push(normal.x, normal.y, normal.z);
-                    }
-                }
-            }
-
             // Create custom mesh
             const customMesh = new BABYLON.Mesh("country", this.scene);
 
             const vertexData = new BABYLON.VertexData();
             vertexData.positions = positions;
-            vertexData.indices = reversedIndices;
+            vertexData.indices = finalIndices;
             vertexData.normals = normals;
 
             vertexData.applyToMesh(customMesh);
+
+            // Track triangle count
+            this.totalTriangleCount += finalIndices.length / 3;
 
             // Create material with varying colors
             const material = new BABYLON.StandardMaterial("countryMat", this.scene);
@@ -662,7 +781,7 @@ class EarthGlobe {
         }
     }
 
-    private addPolygon(coordinates: number[], countryIndex: number, holePolygons?: number[][][]): number | null {
+    private addPolygon(coordinates: number[], countryIndex: number, holePolygons?: number[][][], countryIso2?: string): number | null {
         if (this.polygonsData.length >= MAX_COUNTRIES) {
             console.error("Max polygons reached");
             return null;
@@ -821,7 +940,9 @@ class EarthGlobe {
                         }
 
                         // Skip polygons that cross the antimeridian
-                        if (hasLargeJump) continue;
+                        if (hasLargeJump) {
+                            continue;
+                        }
 
                         // Flatten coordinates
                         const flatCoords: number[] = [];
@@ -838,8 +959,6 @@ class EarthGlobe {
                         // Add enclave holes (other countries inside this one)
                         const holesForPolygon = country.holes?.[polyIdx];
                         if (holesForPolygon && holesForPolygon.length > 0) {
-                            console.log(`  ${country.name_en} polygon ${polyIdx} has enclave holes:`, holesForPolygon);
-
                             // Find hole countries and get their polygons
                             for (const holeISO2 of holesForPolygon) {
                                 const holeCountry = countries.find(c => c.iso2 === holeISO2);
@@ -856,8 +975,6 @@ class EarthGlobe {
                         // Add lake holes (polygons within this polygon in the same country)
                         const lakesForPolygon = country.lakes?.[polyIdx];
                         if (lakesForPolygon && lakesForPolygon.length > 0) {
-                            console.log(`  ${country.name_en} polygon ${polyIdx} has lake holes:`, lakesForPolygon);
-
                             for (const lakeIdx of lakesForPolygon) {
                                 const lakePoly = paths[lakeIdx];
                                 if (lakePoly && lakePoly.length >= 3) {
@@ -867,7 +984,7 @@ class EarthGlobe {
                         }
 
                         // Add this polygon with reference to the country and holes
-                        const polygonIndex = this.addPolygon(flatCoords, this.countriesData.length, holePolygons);
+                        const polygonIndex = this.addPolygon(flatCoords, this.countriesData.length, holePolygons, country.iso2);
                         if (polygonIndex !== null) {
                             polygonIndices.push(polygonIndex);
                         }
@@ -892,7 +1009,7 @@ class EarthGlobe {
                 }
             }
 
-            console.log(`Generated ${addedCount} countries with ${this.polygonsData.length} polygons in ${(performance.now() - meshGenStartTime).toFixed(2)}ms`);
+            console.log(`Generated ${addedCount} countries with ${this.polygonsData.length} polygons, ${this.totalTriangleCount} triangles in ${(performance.now() - meshGenStartTime).toFixed(2)}ms`);
 
             // Create animation texture before merging
             const animTexStartTime = performance.now();
@@ -1184,7 +1301,8 @@ class EarthGlobe {
         const vertexCounts: number[] = [];
         const countryIndicesPerMesh: number[] = [];
 
-        for (const polygon of this.polygonsData) {
+        for (let polygonIdx = 0; polygonIdx < this.polygonsData.length; polygonIdx++) {
+            const polygon = this.polygonsData[polygonIdx];
             const mesh = meshGetter(polygon);
             if (mesh) {
                 meshes.push(mesh);
