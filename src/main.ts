@@ -69,6 +69,7 @@ interface CountryJSON {
     paths: string;
     holes?: string[][];  // Array of hole ISO2 codes per polygon (enclaves)
     lakes?: number[][];  // For each polygon, list of polygon indices that are lakes inside it
+    skipHole?: boolean;  // If true, don't create a hole for this enclave (too small)
 }
 
 class EarthGlobe {
@@ -962,7 +963,8 @@ class EarthGlobe {
                             // Find hole countries and get their polygons
                             for (const holeISO2 of holesForPolygon) {
                                 const holeCountry = countries.find(c => c.iso2 === holeISO2);
-                                if (holeCountry && holeCountry.paths) {
+                                // Skip countries marked with skipHole (too small to render well)
+                                if (holeCountry && holeCountry.paths && !holeCountry.skipHole) {
                                     const holePaths = JSON.parse(holeCountry.paths) as number[][][];
                                     // Add all polygons of the hole country
                                     for (const holePoly of holePaths) {

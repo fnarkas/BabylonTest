@@ -35,6 +35,7 @@ interface CountryJSON {
 interface EnrichedCountry extends CountryJSON {
     holes?: Record<number, string[]>;  // Map from polygon index to hole ISO2 codes (enclaves)
     lakes?: Record<number, number[]>;  // Map from polygon index to lake polygon indices
+    skipHole?: boolean;  // If true, don't create a hole for this enclave (too small to render well)
 }
 
 interface Polygon {
@@ -130,6 +131,20 @@ function boundingBoxContains(bbA: BoundingBox, bbB: BoundingBox): boolean {
     return bbB.minLat >= bbA.minLat && bbB.maxLat <= bbA.maxLat &&
            bbB.minLon >= bbA.minLon && bbB.maxLon <= bbA.maxLon;
 }
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+/**
+ * Countries that should not create holes when they are enclaves.
+ * These are typically very small countries where the hole geometry
+ * causes rendering artifacts or looks worse than no hole.
+ */
+const SKIP_HOLE_COUNTRIES = new Set([
+    'VA',  // Vatican City - too small, causes triangulation issues
+    'SM',  // San Marino - too small, looks better without hole
+]);
 
 // ============================================================================
 // ENCLAVE DETECTION
@@ -333,6 +348,11 @@ async function main() {
 
             if (lakeMap.has(i)) {
                 result.lakes = lakeMap.get(i);
+            }
+
+            // Mark countries that should not create holes when they are enclaves
+            if (SKIP_HOLE_COUNTRIES.has(country.iso2)) {
+                result.skipHole = true;
             }
 
             return result;

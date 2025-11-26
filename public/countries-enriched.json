@@ -1710,7 +1710,8 @@
     "continent": "Europe",
     "name": "San Marino",
     "name_en": "San Marino",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "skipHole": true
   },
   {
     "iso2": "SN",
@@ -1979,7 +1980,8 @@
     "continent": "Europe",
     "name": "Vatikanstaten",
     "name_en": "Vatican City",
-    "is_sovereign": true
+    "is_sovereign": true,
+    "skipHole": true
   },
   {
     "iso2": "VC",
