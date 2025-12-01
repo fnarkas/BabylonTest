@@ -1942,6 +1942,43 @@ class EarthGlobe {
     private createGUI(): void {
         // Create fullscreen UI
         this.advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI", true, this.scene);
+        this.advancedTexture.background = "";  // Make background transparent
+
+        // Create nine-patch country card at top center
+        const countryCard = new Image("countryCard", "/question_card_simple.png");
+        countryCard.width = "300px";
+        countryCard.height = "100px";
+        countryCard.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
+        countryCard.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+        countryCard.top = "20px";
+        countryCard.isPointerBlocker = false;
+
+        // Set nine-patch stretch mode
+        countryCard.stretch = Image.STRETCH_NINE_PATCH;
+
+        // Set slice values - these are absolute positions from origin for a 101x101 image
+        countryCard.sliceLeft = 10;    // Left border ends at x=10
+        countryCard.sliceRight = 91;   // Right border starts at x=91 (101-10)
+        countryCard.sliceTop = 10;     // Top border ends at y=10
+        countryCard.sliceBottom = 91;  // Bottom border starts at y=91 (101-10)
+
+        // Add card to GUI
+        this.advancedTexture.addControl(countryCard);
+
+        // Create text for the country name (layered on top)
+        const countryText = new TextBlock("countryText", "Sweden");
+        countryText.width = "300px";
+        countryText.height = "100px";
+        countryText.color = "#003366";  // Dark blue color
+        countryText.fontSize = 32;
+        countryText.fontWeight = "bold";
+        countryText.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
+        countryText.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+        countryText.top = "20px";
+        countryText.isPointerBlocker = false;
+
+        // Add text to GUI (on top of the card)
+        this.advancedTexture.addControl(countryText);
 
         // Create pin button FIRST so it appears BEHIND the panel
         // Actual image is 196x900px, scale to 1/2
