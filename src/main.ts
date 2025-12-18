@@ -110,6 +110,328 @@ interface CountryJSON {
     skipHole?: boolean;  // If true, don't create a hole for this enclave (too small)
 }
 
+// ============================================================================
+// PIN MANAGER CLASS
+// Handles pin placement mode, preview pin, and pin events
+// ============================================================================
+class PinManager {
+    private scene: Scene;
+    private camera: ArcRotateCamera;
+    private canvas: HTMLCanvasElement;
+    private countryPicker: CountryPicker;
+    private earthSphere: Mesh;
+    private createUnlitMaterial: (originalMaterial: Material | null) => Material;
+
+    // Pin meshes
+    private bossPinTemplate: AbstractMesh | null = null;
+    private placedPins: AbstractMesh[] = [];
+    private previewPin: TransformNode | null = null;
+    private previewPinContainer: TransformNode | null = null;
+
+    // State
+    private isPlacingMode: boolean = false;
+    private hoveredCountry: CountryPolygon | null = null;
+
+    // Callbacks
+    private onPinPlacedCallback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
+    private onCountryHoverCallback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
+    private onPlacingModeChangeCallback: ((isPlacing: boolean) => void) | null = null;
+
+    constructor(
+        scene: Scene,
+        camera: ArcRotateCamera,
+        canvas: HTMLCanvasElement,
+        countryPicker: CountryPicker,
+        earthSphere: Mesh,
+        createUnlitMaterial: (originalMaterial: Material | null) => Material
+    ) {
+        this.scene = scene;
+        this.camera = camera;
+        this.canvas = canvas;
+        this.countryPicker = countryPicker;
+        this.earthSphere = earthSphere;
+        this.createUnlitMaterial = createUnlitMaterial;
+    }
+
+    async init(): Promise<void> {
+        await this.loadBossPinModel();
+        this.createPreviewPin();
+        this.setupEventHandlers();
+    }
+
+    onPinPlaced(callback: (country: CountryPolygon | null, latLon: LatLon) => void): void {
+        this.onPinPlacedCallback = callback;
+    }
+
+    onCountryHover(callback: (country: CountryPolygon | null, latLon: LatLon) => void): void {
+        this.onCountryHoverCallback = callback;
+    }
+
+    onPlacingModeChange(callback: (isPlacing: boolean) => void): void {
+        this.onPlacingModeChangeCallback = callback;
+    }
+
+    enterPlacingMode(): void {
+        if (!this.previewPin) return;
+        this.isPlacingMode = true;
+        document.body.classList.add('placing-mode');
+        this.camera.detachControl();
+
+        // Notify that we entered placing mode
+        if (this.onPlacingModeChangeCallback) {
+            this.onPlacingModeChangeCallback(true);
+        }
+
+        console.log('Entered placing mode');
+    }
+
+    exitPlacingMode(placePin: boolean = false): void {
+        this.isPlacingMode = false;
+        document.body.classList.remove('placing-mode');
+        this.camera.attachControl(this.canvas, true);
+
+        // Notify that we exited placing mode
+        if (this.onPlacingModeChangeCallback) {
+            this.onPlacingModeChangeCallback(false);
+        }
+
+        if (this.previewPin) {
+            this.previewPin.setEnabled(false);
+        }
+
+        if (placePin && this.previewPin) {
+            const pinPos = this.previewPin.position;
+            const latLon = cartesianToLatLon(pinPos.x, pinPos.y, pinPos.z);
+            const country = this.countryPicker.pickCountry(latLon);
+
+            if (country) {
+                console.log(`Pin placed in ${country.name} (${country.iso2})`);
+            } else {
+                console.log(`Pin placed in ocean`);
+            }
+
+            if (this.onPinPlacedCallback) {
+                this.onPinPlacedCallback(country, latLon);
+            }
+        } else {
+            console.log('Pin placement cancelled');
+        }
+
+        this.hoveredCountry = null;
+        console.log('Exited placing mode');
+    }
+
+    isPlacing(): boolean {
+        return this.isPlacingMode;
+    }
+
+    getPreviewPin(): TransformNode | null {
+        return this.previewPin;
+    }
+
+    private async loadBossPinModel(): Promise<void> {
+        try {
+            const result = await SceneLoader.ImportMeshAsync("", "/", "BossPin.glb", this.scene);
+            if (result.meshes.length === 0) {
+                console.error('No meshes found in BossPin model');
+                return;
+            }
+            const rootMesh = result.meshes[0];
+            rootMesh.setEnabled(false);
+            this.bossPinTemplate = rootMesh;
+            console.log('BossPin model loaded successfully');
+        } catch (error) {
+            console.error('Failed to load BossPin model:', error);
+        }
+    }
+
+    private createPreviewPin(): void {
+        if (!this.bossPinTemplate) return;
+
+        // Create pivot transform node
+        const pinPivot = new TransformNode("previewPinPivot", this.scene);
+
+        // Create container for the pin meshes
+        this.previewPinContainer = new TransformNode("previewPinContainer", this.scene);
+        this.previewPinContainer.parent = pinPivot;
+
+        // Scale the pin (adjust based on your model size)
+        const pinScale = 150;
+        this.previewPinContainer.scaling = new Vector3(pinScale, pinScale, pinScale);
+
+        // Clone all child meshes from the template and apply unlit material
+        const clonedMeshes: AbstractMesh[] = [];
+        this.bossPinTemplate.getChildMeshes().forEach(mesh => {
+            const cloned = mesh.clone("previewPinMesh", this.previewPinContainer);
+            if (cloned) {
+                cloned.setEnabled(true);
+
+                // Apply unlit material to make it bright and visible
+                const unlitMaterial = this.createUnlitMaterial(mesh.material);
+                cloned.material = unlitMaterial;
+
+                clonedMeshes.push(cloned);
+            }
+        });
+
+        this.previewPin = pinPivot;
+        this.previewPin.setEnabled(false);
+        console.log('Preview pin created with', clonedMeshes.length, 'meshes');
+    }
+
+    private setupEventHandlers(): void {
+        this.canvas.addEventListener('pointermove', (e) => {
+            if (this.isPlacingMode && this.previewPin) {
+                this.updatePreviewPinPosition(e);
+            }
+        });
+
+        this.canvas.addEventListener('pointerup', (e) => {
+            if (this.isPlacingMode && (e.button === 0 || e.button === 2)) {
+                this.exitPlacingMode(true);
+            }
+        });
+
+        this.canvas.addEventListener('pointerleave', (e) => {
+            if (this.isPlacingMode) {
+                this.exitPlacingMode(false);
+            }
+        });
+
+        this.canvas.addEventListener('pointerdown', (e) => {
+            if (e.button === 2 && !this.isPlacingMode) {
+                const pickResult = this.scene.pick(e.clientX, e.clientY, (mesh) => mesh === this.earthSphere);
+                if (pickResult.hit) {
+                    this.enterPlacingMode();
+                    this.updatePreviewPinPosition(e);
+                }
+            }
+        });
+
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+    }
+
+    private updatePreviewPinPosition(event: PointerEvent): void {
+        if (!this.previewPin) return;
+
+        // Pick only against the earth sphere for performance
+        const pickResult = this.scene.pick(event.clientX, event.clientY, (mesh) => mesh === this.earthSphere);
+
+        if (pickResult.hit && pickResult.pickedPoint) {
+            // Show the pin when we hit the globe
+            if (!this.previewPin.isEnabled()) {
+                this.previewPin.setEnabled(true);
+            }
+
+            // Scale pin based on camera distance
+            if (this.previewPinContainer) {
+                const baseScale = 150;
+                const referenceRadius = 10;  // Reference distance for base scale
+                const pinScale = baseScale * (this.camera.radius / referenceRadius);
+                this.previewPinContainer.scaling.setAll(pinScale);
+            }
+
+            // Calculate surface normal
+            const normal = pickResult.pickedPoint.normalize();
+
+            // Position on globe surface at EARTH_RADIUS
+            this.previewPin.position.copyFrom(normal).scaleInPlace(EARTH_RADIUS);
+
+            // Orient the pivot so its local Y-axis points along the normal
+            const upVector = Vector3.Up();
+            const quaternion = new Quaternion();
+            Quaternion.FromUnitVectorsToRef(upVector, normal, quaternion);
+            this.previewPin.rotationQuaternion = quaternion;
+
+            // Detect which country the pin is over
+            const latLon = cartesianToLatLon(normal.x, normal.y, normal.z);
+            const country = this.countryPicker.pickCountry(latLon);
+
+            // Update hovered country and trigger callback if changed
+            if (country !== this.hoveredCountry) {
+                this.hoveredCountry = country;
+                if (this.onCountryHoverCallback) {
+                    this.onCountryHoverCallback(country, latLon);
+                }
+            }
+        } else {
+            // Not over globe - hide pin
+            if (this.previewPin.isEnabled()) {
+                this.previewPin.setEnabled(false);
+            }
+
+            // Clear hovered country
+            if (this.hoveredCountry) {
+                this.hoveredCountry = null;
+                if (this.onCountryHoverCallback) {
+                    this.onCountryHoverCallback(null, { lat: 0, lon: 0 });
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// GAME CLASS
+// Handles game logic - what happens when pins are placed
+// ============================================================================
+class Game {
+    private clearedCountries: Set<string> = new Set();
+    private score: number = 0;
+    private onCountryClearedCallback: ((country: CountryPolygon) => void) | null = null;
+
+    start(): void {
+        console.log('Game started!');
+    }
+
+    handlePinPlaced(country: CountryPolygon | null, latLon: LatLon): void {
+        if (!country) {
+            console.log('Pin placed in ocean - no country to clear');
+            return;
+        }
+
+        if (this.clearedCountries.has(country.iso2)) {
+            console.log(`Country ${country.name} already cleared!`);
+            return;
+        }
+
+        this.clearCountry(country);
+    }
+
+    isCountryCleared(iso2: string): boolean {
+        return this.clearedCountries.has(iso2);
+    }
+
+    getClearedCountries(): Set<string> {
+        return new Set(this.clearedCountries);
+    }
+
+    getScore(): number {
+        return this.score;
+    }
+
+    onCountryCleared(callback: (country: CountryPolygon) => void): void {
+        this.onCountryClearedCallback = callback;
+    }
+
+    private clearCountry(country: CountryPolygon): void {
+        this.clearedCountries.add(country.iso2);
+        this.score += 100;
+
+        console.log(`Cleared ${country.name}! Score: ${this.score}, Total cleared: ${this.clearedCountries.size}`);
+
+        if (this.onCountryClearedCallback) {
+            this.onCountryClearedCallback(country);
+        }
+    }
+}
+
+// ============================================================================
+// EARTH GLOBE CLASS
+// Main class - orchestrates Globe rendering, PinManager, and Game
+// ============================================================================
 class EarthGlobe {
     private canvas: HTMLCanvasElement;
     private engine: Engine;
@@ -128,17 +450,20 @@ class EarthGlobe {
     private animationEnabled: boolean;  // Toggle for country animation (A key)
     private frameCount: number;
     private sceneInstrumentation: SceneInstrumentation;
-    private bossPinTemplate: AbstractMesh | null;
-    private placedPins: AbstractMesh[];
-    private previewPin: TransformNode | null;
-    private previewPinContainer: TransformNode | null;
-    private isPlacingMode: boolean;
+
+    // Module instances
+    private pinManager!: PinManager;  // Handles pin placement
+    private game!: Game;  // Handles game logic
+
+    // UI elements
     private advancedTexture: AdvancedDynamicTexture | null;
     private pinButtonImage: Image | null;
     private bottomPanel: Rectangle | null;
     private loadingProgress: HTMLElement | null;
     private loadingText: HTMLElement | null;
     private loadingScreen: HTMLElement | null;
+
+    // Data and rendering
     private segmentData: SegmentData | null;
     private mergedSegmentBorders: Mesh | null;  // Merged mesh for segment borders
     private segmentAnimationIndices: Map<number, number[]>;  // Map from segment index to array of country indices
@@ -146,9 +471,6 @@ class EarthGlobe {
     private tempQuaternion: Quaternion;  // Reusable quaternion to avoid allocations
     private waterMaterial: ShaderMaterial | null;  // Water shader material for parameter adjustments
     private countryPicker: CountryPicker;  // Spatial index for fast country lookup from lat/lon
-    private hoveredCountry: CountryPolygon | null;  // Currently hovered country (during pin placement)
-    private onCountrySelected: ((country: CountryPolygon | null, latLon: LatLon) => void) | null;  // Callback for country selection (pin placed)
-    private onCountryHovered: ((country: CountryPolygon | null, latLon: LatLon) => void) | null;  // Callback for country hover (during pin placement)
     private selectionBehavior: CountrySelectionBehavior | null;  // Handles visual feedback for country selection
 
     constructor() {
@@ -176,17 +498,16 @@ class EarthGlobe {
         this.showCountries = false;
         this.animationEnabled = false;
         this.frameCount = 0;
-        this.bossPinTemplate = null;
-        this.placedPins = [];
-        this.previewPin = null;
-        this.previewPinContainer = null;
-        this.isPlacingMode = false;
+
+        // UI elements
         this.advancedTexture = null;
         this.pinButtonImage = null;
         this.bottomPanel = null;
         this.loadingProgress = document.getElementById('loadingProgress');
         this.loadingText = document.getElementById('loadingText');
         this.loadingScreen = document.getElementById('loadingScreen');
+
+        // Data and rendering
         this.segmentData = null;
         this.mergedSegmentBorders = null;
         this.segmentAnimationIndices = new Map();
@@ -194,9 +515,6 @@ class EarthGlobe {
         this.tempQuaternion = new Quaternion();
         this.waterMaterial = null;
         this.countryPicker = new CountryPicker(10);  // 10° grid cells
-        this.hoveredCountry = null;
-        this.onCountrySelected = null;
-        this.onCountryHovered = null;
         this.selectionBehavior = null;  // Will be created after GUI
 
         // Initialize scene instrumentation for accurate performance metrics
@@ -356,13 +674,39 @@ class EarthGlobe {
         // Load countries
         await this.loadCountries();
 
-        this.updateLoadingProgress(75, 'Loading 3D models...');
+        this.updateLoadingProgress(75, 'Creating modules...');
 
-        // Load BossPin model and create preview pin
-        await this.loadBossPinModel();
-        this.createPreviewPin();
+        // Create PinManager
+        this.pinManager = new PinManager(
+            this.scene,
+            this.camera,
+            this.canvas,
+            this.countryPicker,
+            this.earthSphere,
+            (material) => this.createUnlitMaterial(material)
+        );
+        await this.pinManager.init();
 
-        this.updateLoadingProgress(90, 'Setting up controls...');
+        // Create Game
+        this.game = new Game();
+        this.game.start();
+
+        this.updateLoadingProgress(85, 'Wiring modules...');
+
+        // Wire PinManager to Game for pin placement
+        this.pinManager.onPinPlaced((country, latLon) => {
+            this.game.handlePinPlaced(country, latLon);
+        });
+
+        // Wire Game to animate countries when cleared
+        this.game.onCountryCleared((country) => {
+            if (this.selectionBehavior) {
+                this.selectionBehavior.animateToCleared(country.countryIndex);
+                this.selectionBehavior.clearSelectionState();
+            }
+        });
+
+        this.updateLoadingProgress(90, 'Setting up UI...');
 
         // Create GUI
         this.createGUI();
@@ -377,14 +721,22 @@ class EarthGlobe {
                 (countryIndex, saturation) => this.setCountrySaturation(countryIndex, saturation),
                 (countryIndex) => this.getCountrySaturation(countryIndex)
             );
-            // Wire up hover callback for visual feedback during pin placement
-            this.setCountryHoveredCallback((country, latLon) => {
+
+            // Wire PinManager to highlight countries during hover
+            this.pinManager.onCountryHover((country, latLon) => {
                 this.selectionBehavior?.onCountrySelected(country, latLon);
             });
         }
 
-        // Setup drag-and-drop pin placement
-        this.setupPinDragAndDrop();
+        // Setup pin button to enter placing mode
+        this.setupPinButton();
+
+        // Wire PinManager to hide/show pin button when entering/exiting placing mode
+        this.pinManager.onPlacingModeChange((isPlacing) => {
+            if (this.pinButtonImage) {
+                this.pinButtonImage.isVisible = !isPlacing;
+            }
+        });
 
         // Setup keyboard shortcuts
         window.addEventListener('keydown', (e) => {
@@ -540,14 +892,8 @@ class EarthGlobe {
         this.showCountries = false;
         this.animationEnabled = false;
         this.frameCount = 0;
-        this.bossPinTemplate = null;
-        this.placedPins = [];
-        this.previewPin = null;
-        this.previewPinContainer = null;
-        this.isPlacingMode = false;
         this.tempQuaternion = new Quaternion();
         this.countryPicker = new CountryPicker(10);
-        this.hoveredCountry = null;
         // Note: Keep onCountrySelected callback across reloads
 
         // Reinitialize
@@ -1785,218 +2131,7 @@ class EarthGlobe {
         this.updateAnimation();
     }
 
-    private async loadBossPinModel(): Promise<void> {
-        try {
-            const result = await SceneLoader.ImportMeshAsync("", "/", "BossPin.glb", this.scene);
 
-            if (result.meshes.length > 0) {
-                console.log(`Loaded ${result.meshes.length} meshes from BossPin.glb`);
-
-                // Log all meshes
-                result.meshes.forEach((mesh, i) => {
-                    console.log(`  Mesh ${i}: ${mesh.name}, hasVertices: ${mesh.getTotalVertices() > 0}, material: ${mesh.material?.name}`);
-                });
-
-                // Get the root mesh or parent
-                this.bossPinTemplate = result.meshes[0];
-
-                // Check bounding info to see model size
-                const boundingInfo = this.bossPinTemplate.getHierarchyBoundingVectors();
-                console.log('Model bounds:', boundingInfo);
-
-                // Log children
-                const children = this.bossPinTemplate.getChildMeshes();
-                console.log(`Template has ${children.length} child meshes`);
-                children.forEach((child, i) => {
-                    console.log(`  Child ${i}: ${child.name}, vertices: ${child.getTotalVertices()}, material: ${child.material?.name}`);
-                });
-
-                this.bossPinTemplate.setEnabled(false); // Hide template
-
-                console.log('BossPin model loaded successfully');
-            }
-        } catch (error) {
-            console.error('Failed to load BossPin model:', error);
-        }
-    }
-
-    private setupPinDragAndDrop(): void {
-        if (!this.pinButtonImage) return;
-
-        // Handle pointerdown on GUI pin button - click animation and enter placing mode
-        this.pinButtonImage.onPointerDownObservable.add(() => {
-            // Apply click animation
-            this.pinButtonImage!.scaleX = 0.95;
-            this.pinButtonImage!.scaleY = 0.95;
-
-            // Enter placing mode
-            this.enterPlacingMode();
-        });
-
-        // Handle pointerup on button to reset scale
-        this.pinButtonImage.onPointerUpObservable.add(() => {
-            this.pinButtonImage!.scaleX = 1.0;
-            this.pinButtonImage!.scaleY = 1.0;
-        });
-
-        // Handle pointermove on canvas - update preview pin position
-        this.canvas.addEventListener('pointermove', (e) => {
-            if (this.isPlacingMode && this.previewPin) {
-                this.updatePreviewPinPosition(e);
-            }
-        });
-
-        // Handle pointerup - place pin and exit placing mode (left or right button)
-        this.canvas.addEventListener('pointerup', (e) => {
-            if (this.isPlacingMode && (e.button === 0 || e.button === 2)) {
-                this.exitPlacingMode(true); // true = place the pin
-            }
-        });
-
-        // Handle pointer leaving canvas - cancel placing mode
-        this.canvas.addEventListener('pointerleave', (e) => {
-            if (this.isPlacingMode) {
-                this.exitPlacingMode(false); // false = don't place the pin
-            }
-        });
-
-        // Right-click on globe enters placing mode
-        this.canvas.addEventListener('pointerdown', (e) => {
-            if (e.button === 2 && !this.isPlacingMode) {
-                // Check if clicking on the globe
-                const pickResult = this.scene.pick(e.clientX, e.clientY, (mesh) => {
-                    return mesh === this.earthSphere;
-                });
-                if (pickResult.hit) {
-                    this.enterPlacingMode();
-                    this.updatePreviewPinPosition(e);
-                }
-            }
-        });
-
-        // Prevent context menu on right-click
-        this.canvas.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-        });
-    }
-
-    private enterPlacingMode(): void {
-        if (!this.previewPin) return;
-
-        this.isPlacingMode = true;
-
-        // Hide ONLY the GUI pin button, keep the panel visible
-        if (this.pinButtonImage) {
-            this.pinButtonImage.isVisible = false;
-        }
-
-        // Hide cursor during placing mode
-        document.body.classList.add('placing-mode');
-
-        // Disable camera controls
-        this.camera.detachControl();
-
-        // Don't show preview pin yet - wait until mouse is over globe
-        // It will be shown by updatePreviewPinPosition when it hits the globe
-
-        console.log('Entered placing mode');
-    }
-
-    private exitPlacingMode(placePin: boolean): void {
-        this.isPlacingMode = false;
-
-        // Show ONLY the GUI pin button (panel stays visible always)
-        if (this.pinButtonImage) {
-            this.pinButtonImage.isVisible = true;
-        }
-
-        // Show cursor again
-        document.body.classList.remove('placing-mode');
-
-        // Re-enable camera controls
-        this.camera.attachControl(this.canvas, true);
-
-        // Always hide preview pin when exiting placing mode (going back to navigation)
-        if (this.previewPin) {
-            this.previewPin.setEnabled(false);
-        }
-
-        if (placePin) {
-            if (this.previewPin) {
-                const pinPos = this.previewPin.position;
-                const latLon = cartesianToLatLon(pinPos.x, pinPos.y, pinPos.z);
-                const country = this.countryPicker.pickCountry(latLon);
-
-                // Always animate country when pin is placed
-                if (country) {
-                    console.log(`Pin placed in ${country.name} (${country.iso2}) at lat: ${latLon.lat.toFixed(4)}, lon: ${latLon.lon.toFixed(4)}`);
-
-                    // Animate country to cleared state (grey and flush with globe)
-                    if (this.selectionBehavior) {
-                        this.selectionBehavior.animateToCleared(country.countryIndex);
-                        this.selectionBehavior.clearSelectionState();
-                    }
-                } else {
-                    console.log(`Pin placed in ocean at lat: ${latLon.lat.toFixed(4)}, lon: ${latLon.lon.toFixed(4)}`);
-                }
-
-                // Call optional callback if set
-                if (this.onCountrySelected) {
-                    this.onCountrySelected(country, latLon);
-                }
-            } else {
-                console.log('Pin placed at current position');
-            }
-        } else {
-            console.log('Pin placement cancelled');
-
-            // Clear hovered country and deselect when cancelling
-            if (this.hoveredCountry && this.selectionBehavior) {
-                this.selectionBehavior.deselectCurrent();
-            }
-        }
-
-        this.hoveredCountry = null;
-        console.log('Exited placing mode');
-    }
-
-    private createPreviewPin(): void {
-        if (!this.bossPinTemplate) return;
-
-        const clonedMeshes: AbstractMesh[] = [];
-        const originalChildren = this.bossPinTemplate.getChildMeshes();
-
-        // Create parent transform node for preview
-        const pinPivot = new TransformNode("previewPinPivot", this.scene);
-
-        // Create pin container as child of pivot
-        this.previewPinContainer = new TransformNode("previewPinContainer", this.scene);
-        this.previewPinContainer.parent = pinPivot;
-
-        // Initial scale (will be updated based on camera zoom)
-        const pinScale = 150;
-        this.previewPinContainer.scaling = new Vector3(pinScale, pinScale, pinScale);
-
-        // Clone each child mesh and apply unlit shader
-        originalChildren.forEach(child => {
-            const clonedChild = child.clone(child.name + "_preview", this.previewPinContainer);
-            if (clonedChild) {
-                clonedChild.setEnabled(true);
-                clonedMeshes.push(clonedChild);
-
-                // Apply unlit shader to make it bright
-                const unlitMaterial = this.createUnlitMaterial(child.material);
-                clonedChild.material = unlitMaterial;
-            }
-        });
-
-        this.previewPin = pinPivot;
-
-        // Hide the preview pin initially (only show during placing mode)
-        this.previewPin.setEnabled(false);
-
-        console.log('Preview pin created and hidden');
-    }
 
     private createGUI(): void {
         // Create fullscreen UI
@@ -2054,21 +2189,6 @@ class EarthGlobe {
         // Make it interactive
         this.pinButtonImage.isPointerBlocker = true;
 
-        // Add hover effects
-        this.pinButtonImage.onPointerEnterObservable.add(() => {
-            if (!this.isPlacingMode) {
-                this.pinButtonImage!.scaleX = 1.05;
-                this.pinButtonImage!.scaleY = 1.05;
-            }
-        });
-
-        this.pinButtonImage.onPointerOutObservable.add(() => {
-            if (!this.isPlacingMode) {
-                this.pinButtonImage!.scaleX = 1.0;
-                this.pinButtonImage!.scaleY = 1.0;
-            }
-        });
-
         // Add pin to GUI FIRST (so it's behind)
         this.advancedTexture.addControl(this.pinButtonImage);
 
@@ -2090,6 +2210,21 @@ class EarthGlobe {
         this.advancedTexture.addControl(this.bottomPanel);
 
         console.log('GUI created with fixed sizing (matching original DOM layout)');
+    }
+
+    private setupPinButton(): void {
+        if (!this.pinButtonImage) return;
+
+        this.pinButtonImage.onPointerDownObservable.add(() => {
+            this.pinButtonImage!.scaleX = 0.95;
+            this.pinButtonImage!.scaleY = 0.95;
+            this.pinManager.enterPlacingMode();
+        });
+
+        this.pinButtonImage.onPointerUpObservable.add(() => {
+            this.pinButtonImage!.scaleX = 1.0;
+            this.pinButtonImage!.scaleY = 1.0;
+        });
     }
 
     private recreateGUI(): void {
@@ -2125,80 +2260,12 @@ class EarthGlobe {
             });
         }
 
-        // Re-setup pin drag and drop event handlers
-        this.setupPinDragAndDrop();
+        // Re-setup pin button event handlers
+        this.setupPinButton();
 
         console.log('GUI recreated for new screen size');
     }
 
-    private updatePreviewPinPosition(event: PointerEvent): void {
-        if (!this.previewPin) return;
-
-        // PERFORMANCE OPTIMIZATION: Only pick against the earth sphere, not all meshes
-        const pickResult = this.scene.pick(event.clientX, event.clientY, (mesh) => {
-            return mesh === this.earthSphere;
-        });
-
-        if (pickResult.hit && pickResult.pickedPoint) {
-            // Show the pin when we hit the globe for the first time
-            if (!this.previewPin.isEnabled()) {
-                this.previewPin.setEnabled(true);
-            }
-
-            // Scale pin based on camera distance (smaller when zoomed in, larger when zoomed out)
-            if (this.previewPinContainer) {
-                const baseScale = 150;
-                const referenceRadius = 10;  // Reference distance for base scale
-                const pinScale = baseScale * (this.camera.radius / referenceRadius);
-                this.previewPinContainer.scaling.setAll(pinScale);
-            }
-
-            // Calculate surface normal (normalize in place to avoid allocation)
-            const normal = pickResult.pickedPoint.normalize();
-
-            // Position on globe surface (scale in place to avoid allocation)
-            this.previewPin.position.copyFrom(normal).scaleInPlace(EARTH_RADIUS);
-
-            // Orient the pivot so its local Y-axis points along the normal
-            // Reuse tempQuaternion to avoid allocating a new quaternion every frame
-            const defaultUp = Vector3.Up();
-            Quaternion.FromUnitVectorsToRef(
-                defaultUp,
-                normal,
-                this.tempQuaternion
-            );
-            this.previewPin.rotationQuaternion = this.tempQuaternion;
-
-            // Detect which country the pin is over
-            const pickedPoint = pickResult.pickedPoint;
-            const latLon = cartesianToLatLon(pickedPoint.x, pickedPoint.y, pickedPoint.z);
-            const country = this.countryPicker.pickCountry(latLon);
-
-            // Check if hovered country changed
-            const previousHovered = this.hoveredCountry;
-            const countryChanged = country?.iso2 !== previousHovered?.iso2;
-
-            if (country) {
-                this.hoveredCountry = country;
-            } else {
-                this.hoveredCountry = null;
-            }
-
-            // Call hover callback if country changed
-            if (countryChanged && this.onCountryHovered) {
-                this.onCountryHovered(country, latLon);
-            }
-        } else {
-            // Not over globe - clear hover if was previously hovering
-            if (this.hoveredCountry && this.onCountryHovered) {
-                const latLon = cartesianToLatLon(0, 0, 0); // Dummy latLon
-                this.onCountryHovered(null, latLon);
-            }
-            this.hoveredCountry = null;
-        }
-        // Don't hide the pin when not over the globe - keep it at last position
-        // It will only be hidden when exiting placing mode
-    }
 
     private async toggleInspector(): Promise<void> {
         // Inspector only available in development builds
