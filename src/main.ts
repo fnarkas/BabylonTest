@@ -122,7 +122,8 @@ class EarthGlobe {
     private mergedCountries: Mesh | null;  // Single merged mesh for all country polygons
     private mergedExtrudedBorders: Mesh | null;  // Single merged mesh for all extruded borders
     private animationTexture: DynamicTexture | null;  // Texture storing animation values per country
-    private animationData: Float32Array;  // Animation values for each country
+    private animationData: Float32Array;  // Animation values (altitude) for each country
+    private saturationData: Float32Array;  // Saturation values for each country (1.0 = colored, 0.0 = grey)
     private showCountries: boolean;
     private animationEnabled: boolean;  // Toggle for country animation (A key)
     private frameCount: number;
@@ -170,6 +171,8 @@ class EarthGlobe {
         this.mergedExtrudedBorders = null;
         this.animationTexture = null;
         this.animationData = new Float32Array(1024);  // Countries + segments (1024 max)
+        this.saturationData = new Float32Array(1024);  // Saturation for each country
+        this.saturationData.fill(1.0);  // Initialize to full saturation (colored)
         this.showCountries = false;
         this.animationEnabled = false;
         this.frameCount = 0;
@@ -274,6 +277,30 @@ class EarthGlobe {
         return 0;
     }
 
+    /**
+     * Set the saturation value for a country
+     * @param countryIndex The index of the country in countriesData
+     * @param saturation Value between 0 and 1 (0 = grey, 1 = full color)
+     */
+    public setCountrySaturation(countryIndex: number, saturation: number): void {
+        if (countryIndex >= 0 && countryIndex < this.saturationData.length) {
+            this.saturationData[countryIndex] = Math.max(0, Math.min(1, saturation));
+            this.updateAnimationTexture();
+        }
+    }
+
+    /**
+     * Get the current saturation value for a country
+     * @param countryIndex The index of the country
+     * @returns The saturation value (0-1)
+     */
+    public getCountrySaturation(countryIndex: number): number {
+        if (countryIndex >= 0 && countryIndex < this.saturationData.length) {
+            return this.saturationData[countryIndex];
+        }
+        return 1.0;  // Default to full saturation
+    }
+
     // =========================================================================
     // Private Methods
     // =========================================================================
@@ -346,7 +373,9 @@ class EarthGlobe {
                 this.scene,
                 this.advancedTexture,
                 (countryIndex, altitude) => this.setCountryAltitude(countryIndex, altitude),
-                (countryIndex) => this.getCountryAltitude(countryIndex)
+                (countryIndex) => this.getCountryAltitude(countryIndex),
+                (countryIndex, saturation) => this.setCountrySaturation(countryIndex, saturation),
+                (countryIndex) => this.getCountrySaturation(countryIndex)
             );
             // Wire up hover callback for visual feedback during pin placement
             this.setCountryHoveredCallback((country, latLon) => {
@@ -506,6 +535,8 @@ class EarthGlobe {
         this.mergedExtrudedBorders = null;
         this.animationTexture = null;
         this.animationData = new Float32Array(1024);  // Countries + segments (1024 max)
+        this.saturationData = new Float32Array(1024);  // Saturation for each country
+        this.saturationData.fill(1.0);  // Initialize to full saturation (colored)
         this.showCountries = false;
         this.animationEnabled = false;
         this.frameCount = 0;
@@ -707,7 +738,7 @@ class EarthGlobe {
         }
     }
 
-    private createCountryMesh(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE, holes?: LatLonPoint[][]): Mesh | null {
+    private createCountryMesh(latLonPoints: LatLonPoint[], altitude: number = 0, holes?: LatLonPoint[][]): Mesh | null {
         if (latLonPoints.length < 3) {
             console.error("Not enough points to create mesh");
             return null;
@@ -813,7 +844,7 @@ class EarthGlobe {
         return new Color3(r, g, b);
     }
 
-    private createExtrudedBorder(latLonPoints: LatLonPoint[], altitude: number = COUNTRY_ALTITUDE, countryIndex: number = 0, isHole: boolean = false): Mesh | null {
+    private createExtrudedBorder(latLonPoints: LatLonPoint[], altitude: number = 0, countryIndex: number = 0, isHole: boolean = false): Mesh | null {
         try {
             // Convert lat/lon points to 3D sphere coordinates (top edge of border)
             const topPoints: Vector3[] = [];
@@ -954,19 +985,19 @@ class EarthGlobe {
             }
         }
 
-        const mesh = this.createCountryMesh(latLonPoints, COUNTRY_ALTITUDE, holeLatLonPoints);
+        const mesh = this.createCountryMesh(latLonPoints, 0, holeLatLonPoints);
 
         if (mesh) {
             this.showCountries = true;
 
             // Create extruded border walls for this polygon (outer border)
-            const extrudedBorder = this.createExtrudedBorder(latLonPoints, COUNTRY_ALTITUDE, countryIndex, false);
+            const extrudedBorder = this.createExtrudedBorder(latLonPoints, 0, countryIndex, false);
 
             // Create extruded borders for holes
             const holeExtrudedBorders: Mesh[] = [];
             if (holeLatLonPoints && holeLatLonPoints.length > 0) {
                 for (const holePoints of holeLatLonPoints) {
-                    const holeExtruded = this.createExtrudedBorder(holePoints, COUNTRY_ALTITUDE, countryIndex, true);
+                    const holeExtruded = this.createExtrudedBorder(holePoints, 0, countryIndex, true);
                     if (holeExtruded) {
                         holeExtrudedBorders.push(holeExtruded);
                     }
@@ -1157,6 +1188,11 @@ class EarthGlobe {
                         };
                         this.countriesData.push(countryData);
 
+                        // Initialize animation data for default altitude
+                        // Default altitude is COUNTRY_ALTITUDE, shader multiplies by ANIMATION_AMPLITUDE
+                        const defaultAnimValue = COUNTRY_ALTITUDE / ANIMATION_AMPLITUDE;
+                        this.animationData[countryData.index] = defaultAnimValue;
+
                         console.log('Added country:', country.name_en, 'with', polygonIndices.length, 'polygon(s)');
                         addedCount++;
                     }
@@ -1311,10 +1347,12 @@ class EarthGlobe {
 
         // Update buffer directly (much faster than canvas operations)
         for (let i = 0; i < entriesUsed; i++) {
-            const value = this.animationData[i] || 0;
+            const altitudeValue = this.animationData[i] || 0;
+            const saturationValue = this.saturationData[i] !== undefined ? this.saturationData[i] : 1.0;
             const pixelIndex = i * 4;
-            this.textureBuffer[pixelIndex] = value * 255;  // R channel
-            // G, B already 0, A already 255
+            this.textureBuffer[pixelIndex] = altitudeValue * 255;  // R channel - altitude
+            this.textureBuffer[pixelIndex + 1] = saturationValue * 255;  // G channel - saturation
+            // B already 0, A already 255
         }
 
         // Update texture from buffer (1D, single row)
@@ -1884,29 +1922,40 @@ class EarthGlobe {
         }
 
         if (placePin) {
-            // Call the country selected callback if set
-            if (this.onCountrySelected && this.previewPin) {
+            if (this.previewPin) {
                 const pinPos = this.previewPin.position;
                 const latLon = cartesianToLatLon(pinPos.x, pinPos.y, pinPos.z);
                 const country = this.countryPicker.pickCountry(latLon);
-                this.onCountrySelected(country, latLon);
 
+                // Always animate country when pin is placed
                 if (country) {
                     console.log(`Pin placed in ${country.name} (${country.iso2}) at lat: ${latLon.lat.toFixed(4)}, lon: ${latLon.lon.toFixed(4)}`);
+
+                    // Animate country to cleared state (grey and flush with globe)
+                    if (this.selectionBehavior) {
+                        this.selectionBehavior.animateToCleared(country.countryIndex);
+                        this.selectionBehavior.clearSelectionState();
+                    }
                 } else {
                     console.log(`Pin placed in ocean at lat: ${latLon.lat.toFixed(4)}, lon: ${latLon.lon.toFixed(4)}`);
+                }
+
+                // Call optional callback if set
+                if (this.onCountrySelected) {
+                    this.onCountrySelected(country, latLon);
                 }
             } else {
                 console.log('Pin placed at current position');
             }
         } else {
             console.log('Pin placement cancelled');
+
+            // Clear hovered country and deselect when cancelling
+            if (this.hoveredCountry && this.selectionBehavior) {
+                this.selectionBehavior.deselectCurrent();
+            }
         }
 
-        // Clear hovered country and deselect when exiting placing mode
-        if (this.hoveredCountry && this.selectionBehavior) {
-            this.selectionBehavior.deselectCurrent();
-        }
         this.hoveredCountry = null;
         console.log('Exited placing mode');
     }
@@ -2067,7 +2116,9 @@ class EarthGlobe {
                 this.scene,
                 this.advancedTexture,
                 (countryIndex, altitude) => this.setCountryAltitude(countryIndex, altitude),
-                (countryIndex) => this.getCountryAltitude(countryIndex)
+                (countryIndex) => this.getCountryAltitude(countryIndex),
+                (countryIndex, saturation) => this.setCountrySaturation(countryIndex, saturation),
+                (countryIndex) => this.getCountrySaturation(countryIndex)
             );
             this.setCountryHoveredCallback((country, latLon) => {
                 this.selectionBehavior?.onCountrySelected(country, latLon);

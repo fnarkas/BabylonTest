@@ -4,7 +4,9 @@ precision highp float;
 varying float vCountryIndex;
 
 // Uniforms
-uniform float countryHsvSaturation;
+uniform sampler2D animationTexture;
+uniform float animationTextureWidth;
+uniform float countryHsvSaturation;  // Global saturation (deprecated, using per-country now)
 uniform float countryHsvValue;
 
 // HSV to RGB conversion
@@ -15,9 +17,13 @@ vec3 hsv2rgb(vec3 c) {
 }
 
 void main(void) {
+    // Read per-country saturation from animation texture (G channel)
+    float texCoord = (vCountryIndex + 0.5) / animationTextureWidth;
+    float saturation = texture2D(animationTexture, vec2(texCoord, 0.5)).g;
+
     // Create unique color per country using HSV
     float hue = fract(vCountryIndex / 360.0);
-    vec3 color = hsv2rgb(vec3(hue, countryHsvSaturation, countryHsvValue));
+    vec3 color = hsv2rgb(vec3(hue, saturation, countryHsvValue));
 
     gl_FragColor = vec4(color, 1.0);
 }
