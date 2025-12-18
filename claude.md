@@ -136,3 +136,66 @@ try {
 ## Summary
 
 **Default to CLI testing** unless visual/interactive verification is required. This creates a faster, more reliable development workflow for both Claude and the developer.
+
+## Development Server
+
+### Always Running
+
+A development server is **always running** in the background via `npm run dev`:
+
+- **Server URL**: `http://localhost:3002/` (or next available port if occupied)
+- **Hot Module Reloading**: Vite automatically reloads the page when files change
+- **No manual restarts needed**: File changes are reflected immediately in the browser
+
+### Claude's Access to Server Output
+
+Claude can monitor the dev server output using the `BashOutput` tool:
+
+```typescript
+// Check server status and any compilation errors
+BashOutput(bash_id: "53b03e")
+```
+
+This allows Claude to:
+- Verify the server is running
+- Check which port it's using
+- See compilation errors or warnings
+- Monitor page reload events
+
+### Testing Workflow
+
+**Important**: Claude should **NOT** attempt to open the browser using `open http://localhost:3002/`.
+
+**Correct workflow:**
+1. Claude makes code changes
+2. Vite automatically reloads the page
+3. User tests in their already-open browser
+4. User reports results (what works, what doesn't, console errors)
+
+**Why:**
+- User already has browser open and is actively testing
+- Opening new tabs/windows is disruptive
+- User can see visual behavior and interaction that Claude cannot
+- User can check browser console for runtime errors
+
+### When Browser Testing Is Needed
+
+For this Babylon.js 3D globe application, most features require browser testing because they involve:
+- 3D rendering and visual verification
+- Mouse interaction (hover, click, drag)
+- Camera controls and animations
+- Shader rendering
+- GUI elements
+
+In these cases:
+1. Claude makes the code changes
+2. Claude monitors build output for compilation errors
+3. User tests in browser and reports behavior
+4. User reports any browser console errors or warnings
+
+### Reporting Issues
+
+When reporting issues from the browser, please include:
+- **Behavior**: What happened vs. what was expected
+- **Console errors**: Any errors or warnings in the browser console
+- **Steps to reproduce**: What actions triggered the issue
