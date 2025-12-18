@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Correct Location Marker Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        button {
+            margin: 5px 0;
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            width: 220px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.secondary {
+            background: #2196F3;
+        }
+        button.secondary:hover {
+            background: #0b7dda;
+        }
+        button.clear {
+            background: #f44336;
+        }
+        button.clear:hover {
+            background: #da190b;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="controls">
+        <h3>Correct Location Marker Test</h3>
+        <button id="showParis">Show: Paris</button>
+        <button id="showTokyo">Show: Tokyo</button>
+        <button id="showNYC">Show: New York</button>
+        <button id="showSydney">Show: Sydney</button>
+        <button id="startPulse" class="secondary">Start Pulse Animation</button>
+        <button id="stopPulse" class="secondary">Stop Pulse</button>
+        <button id="hide" class="clear">Hide Marker</button>
+        <div id="info">
+            <div>Status: <span id="status">Hidden</span></div>
+            <div>Location: <span id="location">-</span></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { EarthGlobe } from './src/earthGlobe';
+        import { CorrectLocationMarker } from './src/correctLocationMarker';
+        import { MultiPinManager } from './src/multiPinManager';
+        import { getPlayerColor } from './shared/playerColors';
+        import { enableInspector } from './shared/testUtils';
+
+        const canvas = document.getElementById('renderCanvas');
+
+        // Create EarthGlobe instance
+        const earthGlobe = new EarthGlobe('renderCanvas');
+
+        // Wait for globe to load
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Get scene and camera from globe
+        const scene = earthGlobe.getScene();
+        const camera = earthGlobe.getCamera();
+
+        // Create correct location marker
+        const correctMarker = new CorrectLocationMarker(scene, camera, earthGlobe);
+
+        // Expose to console for debugging
+        window.debugScene = scene;
+        window.debugMarker = correctMarker;
+        window.debugEarthGlobe = earthGlobe;
+
+        // DEBUG: Create a pin manager to test if pins show at same location
+        const debugPinManager = new MultiPinManager(
+            scene,
+            camera,
+            (material) => earthGlobe.createUnlitMaterial(material)
+        );
+        await debugPinManager.init();
+
+        scene.onBeforeRenderObservable.add(() => {
+            debugPinManager.updatePinScales();
+        });
+
+        // Test locations
+        const locations = {
+            paris: { name: 'Paris, France', lat: 48.8584, lon: 2.2945 },
+            tokyo: { name: 'Tokyo, Japan', lat: 35.6762, lon: 139.6503 },
+            nyc: { name: 'New York, USA', lat: 40.7128, lon: -74.0060 },
+            sydney: { name: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 }
+        };
+
+        function updateStatus() {
+            const statusEl = document.getElementById('status');
+            const locationEl = document.getElementById('location');
+
+            if (correctMarker.isVisible()) {
+                statusEl.textContent = 'Visible';
+                statusEl.style.color = '#4CAF50';
+
+                const pos = correctMarker.getPosition();
+                if (pos) {
+                    locationEl.textContent = `${pos.lat.toFixed(2)}°, ${pos.lon.toFixed(2)}°`;
+                }
+            } else {
+                statusEl.textContent = 'Hidden';
+                statusEl.style.color = '#f44336';
+                locationEl.textContent = '-';
+            }
+        }
+
+        // Show Paris
+        document.getElementById('showParis').addEventListener('click', () => {
+            const loc = locations.paris;
+
+            console.log('=== SHOWING MARKER AT PARIS ===');
+            console.log('Lat:', loc.lat, 'Lon:', loc.lon);
+
+            correctMarker.show(loc.lat, loc.lon);
+
+            // DEBUG: Also add a pin at the same location
+            debugPinManager.clearAllPins();
+            debugPinManager.addPin('debug', 'DEBUG PIN', getPlayerColor(0), loc.lat, loc.lon);
+
+            updateStatus();
+            console.log(`Showing marker at ${loc.name}`);
+            console.log('DEBUG: Also added a red pin at same location');
+        });
+
+        // Show Tokyo
+        document.getElementById('showTokyo').addEventListener('click', () => {
+            const loc = locations.tokyo;
+            correctMarker.show(loc.lat, loc.lon);
+            updateStatus();
+            console.log(`Showing marker at ${loc.name}`);
+        });
+
+        // Show NYC
+        document.getElementById('showNYC').addEventListener('click', () => {
+            const loc = locations.nyc;
+            correctMarker.show(loc.lat, loc.lon);
+            updateStatus();
+            console.log(`Showing marker at ${loc.name}`);
+        });
+
+        // Show Sydney
+        document.getElementById('showSydney').addEventListener('click', () => {
+            const loc = locations.sydney;
+            correctMarker.show(loc.lat, loc.lon);
+            updateStatus();
+            console.log(`Showing marker at ${loc.name}`);
+        });
+
+        // Start pulse animation
+        document.getElementById('startPulse').addEventListener('click', () => {
+            correctMarker.startPulseAnimation();
+            console.log('Started pulse animation');
+        });
+
+        // Stop pulse animation
+        document.getElementById('stopPulse').addEventListener('click', () => {
+            correctMarker.stopPulseAnimation();
+            console.log('Stopped pulse animation');
+        });
+
+        // Hide marker
+        document.getElementById('hide').addEventListener('click', () => {
+            correctMarker.hide();
+            updateStatus();
+            console.log('Marker hidden');
+        });
+
+        // Update marker scale in render loop
+        scene.onBeforeRenderObservable.add(() => {
+            correctMarker.updateScale();
+        });
+
+        // Enable inspector
+        await enableInspector(scene);
+
+        // Add ocean toggle hotkey (Cmd+O / Ctrl+O)
+        window.addEventListener('keydown', (event) => {
+            if ((event.key === 'o' || event.key === 'O') && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                const earthSphere = earthGlobe.getEarthSphere();
+                earthSphere.isVisible = !earthSphere.isVisible;
+                console.log('Ocean visibility:', earthSphere.isVisible ? 'VISIBLE' : 'HIDDEN');
+            }
+        });
+
+        updateStatus();
+        console.log('Correct Location Marker test initialized');
+        console.log('Click buttons to show marker at different locations');
+        console.log('Press "Cmd+O" (Mac) or "Ctrl+O" (Windows/Linux) to toggle ocean visibility');
+
+        // AUTO-SHOW marker on load for testing
+        correctMarker.show(0, 0); // Equator at 0° longitude
+        updateStatus();
+        console.log('AUTO: Showing marker at hardcoded test position');
+    </script>
+</body>
+</html>

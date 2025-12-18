@@ -1,5 +1,33 @@
 # Development Strategy for Claude Code
 
+## CRITICAL: Wait for User Verification at Checkpoints
+
+**MOST IMPORTANT RULE:**
+- **NEVER** continue to the next feature until the user has verified the current one works
+- After implementing a feature, **STOP** and wait for user confirmation
+- User needs to test and verify before we can commit and move forward
+- This creates clear "checkpoints" where we know we're in a working state
+- Makes debugging much easier by isolating changes
+- Enables clean git commits at each checkpoint
+
+**Workflow:**
+1. Implement ONE feature completely
+2. **STOP and WAIT** for user to test
+3. User confirms: "Works!" or reports issues
+4. Fix any issues and wait for re-verification
+5. Only after user confirmation: move to next feature
+
+**Example:**
+```
+Claude: "I've implemented the CorrectLocationMarker. Please test at http://localhost:3002/test-correct-marker.html"
+[WAIT - do not continue with next feature]
+User: "The marker is not visible"
+Claude: [fixes the issue]
+[WAIT - do not continue with next feature]
+User: "Works now! Continue"
+Claude: [NOW proceed to next feature]
+```
+
 ## Testing Approach
 
 ### Prefer CLI-Based Testing Over Browser Testing
@@ -199,3 +227,28 @@ When reporting issues from the browser, please include:
 - **Behavior**: What happened vs. what was expected
 - **Console errors**: Any errors or warnings in the browser console
 - **Steps to reproduce**: What actions triggered the issue
+
+## Babylon.js Common Pitfalls
+
+### Vector Mutation: `normalize()` vs `normalizeToNew()`
+
+**The Bug:**
+```typescript
+// ❌ WRONG - Mutates the vector!
+const normal = position.normalize();
+
+// ✅ CORRECT - Creates new vector
+const normal = position.normalizeToNew();
+```
+
+**Why It's Tricky:**
+- `normalize()` modifies AND returns the vector (silent mutation)
+- Console logs show correct values initially, but mutations happen later in callbacks
+- Bug doesn't appear until event handlers run (e.g., `updateStatus()` calling `getPosition()`)
+
+**How to Debug:**
+1. Query the actual scene graph: `scene.getNodeByName('myNode').position.length()`
+2. Don't trust console logs alone - they show stale values
+3. Search codebase for `.normalize(` - should probably be `.normalizeToNew()`
+
+**Other methods to watch:** `scale()`, `add()`, `subtract()`, `multiply()` - all have `InPlace` variants

@@ -262,6 +262,28 @@ export class EarthGlobe {
     }
 
     /**
+     * Position an object at lat/lon with optional altitude
+     * @param lat Latitude in degrees
+     * @param lon Longitude in degrees
+     * @param altitude Altitude above globe surface (default: COUNTRY_ALTITUDE + 0.01)
+     * @param aboveCountry If true, uses COUNTRY_ALTITUDE as base, otherwise uses globe surface
+     * @returns Object with position and normal vectors
+     */
+    public positionAtLatLon(lat: number, lon: number, altitude?: number, aboveCountry: boolean = true): {
+        position: Vector3;
+        normal: Vector3;
+    } {
+        // Default altitude: just above countries
+        const defaultAltitude = aboveCountry ? COUNTRY_ALTITUDE + 0.01 : 0.01;
+        const finalAltitude = altitude !== undefined ? altitude : defaultAltitude;
+
+        const position = this.latLonToSphere(lat, lon, finalAltitude);
+        const normal = position.normalizeToNew(); // Use normalizeToNew() to avoid modifying position
+
+        return { position, normal };
+    }
+
+    /**
      * Set a callback to be called when a country is selected (pin placed on it)
      * @param callback Function called with the country info and lat/lon, or null if over ocean
      */

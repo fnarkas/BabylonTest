@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reveal Sequence Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        button {
+            margin: 5px 0;
+            padding: 10px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            width: 250px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.secondary {
+            background: #2196F3;
+        }
+        button.secondary:hover {
+            background: #0b7dda;
+        }
+        button.clear {
+            background: #f44336;
+        }
+        button.clear:hover {
+            background: #da190b;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #aaa;
+            border-top: 1px solid #555;
+            padding-top: 10px;
+        }
+        .scenario {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #555;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="controls">
+        <h3>🎮 Reveal Sequence Test</h3>
+        <p style="font-size: 11px; color: #aaa; margin: 5px 0;">Simulates multiplayer game reveal</p>
+
+        <div class="scenario">
+            <strong>Question: Where is Paris?</strong>
+            <button id="scenario1">▶ Run Scenario</button>
+        </div>
+
+        <div class="scenario">
+            <strong>Custom:</strong>
+            <button id="show4Players" class="secondary">Show 4 Player Answers</button>
+            <button id="showCorrect" class="secondary">Show Correct Answer</button>
+            <button id="clearAll" class="clear">Clear Everything</button>
+        </div>
+
+        <div id="info">
+            <div>Player Pins: <span id="pinCount">0</span></div>
+            <div>Correct Marker: <span id="markerStatus">Hidden</span></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { EarthGlobe } from './src/earthGlobe';
+        import { MultiPinManager } from './src/multiPinManager';
+        import { CorrectLocationMarker } from './src/correctLocationMarker';
+        import { getPlayerColor } from './shared/playerColors';
+        import { enableInspector } from './shared/testUtils';
+
+        const canvas = document.getElementById('renderCanvas');
+
+        // Create EarthGlobe
+        const earthGlobe = new EarthGlobe('renderCanvas');
+
+        // Wait for globe to load
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const scene = earthGlobe.getScene();
+        const camera = earthGlobe.getCamera();
+
+        // Initialize managers
+        const multiPinManager = new MultiPinManager(
+            scene,
+            camera,
+            (material) => earthGlobe.createUnlitMaterial(material)
+        );
+        await multiPinManager.init();
+
+        const correctMarker = new CorrectLocationMarker(scene, camera);
+
+        // Update scales in render loop
+        scene.onBeforeRenderObservable.add(() => {
+            multiPinManager.updatePinScales();
+            correctMarker.updateScale();
+        });
+
+        function updateUI() {
+            document.getElementById('pinCount').textContent = multiPinManager.getPins().size;
+            document.getElementById('markerStatus').textContent = correctMarker.isVisible() ? 'Visible' : 'Hidden';
+        }
+
+        // Scenario 1: "Where is Paris?"
+        document.getElementById('scenario1').addEventListener('click', async () => {
+            console.log('=== Running Scenario: Where is Paris? ===');
+
+            // Clear everything first
+            multiPinManager.clearAllPins();
+            correctMarker.hide();
+            updateUI();
+
+            // Correct answer: Paris
+            const correctAnswer = { lat: 48.8584, lon: 2.2945 };
+
+            // Simulate 4 players answering with varying accuracy
+            const playerAnswers = [
+                { id: 'p1', name: 'Alice', lat: 48.8584, lon: 2.2945 },   // Perfect!
+                { id: 'p2', name: 'Bob', lat: 51.5074, lon: -0.1278 },     // London (wrong)
+                { id: 'p3', name: 'Charlie', lat: 48.2082, lon: 16.3738 }, // Vienna (close-ish)
+                { id: 'p4', name: 'Diana', lat: 52.5200, lon: 13.4050 }    // Berlin (nearby)
+            ];
+
+            console.log('Step 1: Show player answers...');
+
+            // Add player pins one by one with delay
+            for (let i = 0; i < playerAnswers.length; i++) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const answer = playerAnswers[i];
+                const color = getPlayerColor(i);
+                multiPinManager.addPin(answer.id, answer.name, color, answer.lat, answer.lon);
+                updateUI();
+                console.log(`  ${answer.name} answered`);
+            }
+
+            // Wait a bit
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            console.log('Step 2: Show correct answer...');
+            // Show correct answer
+            correctMarker.show(correctAnswer.lat, correctAnswer.lon);
+            correctMarker.startPulseAnimation();
+            updateUI();
+
+            console.log('Step 3: Reveal complete!');
+            console.log('=== Scenario Complete ===');
+        });
+
+        // Show 4 players manually
+        document.getElementById('show4Players').addEventListener('click', () => {
+            multiPinManager.clearAllPins();
+
+            const answers = [
+                { id: 'p1', name: 'Alice', lat: 48.8584, lon: 2.2945 },    // Paris
+                { id: 'p2', name: 'Bob', lat: 40.7128, lon: -74.0060 },    // NYC
+                { id: 'p3', name: 'Charlie', lat: 35.6762, lon: 139.6503 }, // Tokyo
+                { id: 'p4', name: 'Diana', lat: -33.8688, lon: 151.2093 }   // Sydney
+            ];
+
+            answers.forEach((answer, i) => {
+                const color = getPlayerColor(i);
+                multiPinManager.addPin(answer.id, answer.name, color, answer.lat, answer.lon);
+            });
+
+            updateUI();
+            console.log('Added 4 player answers');
+        });
+
+        // Show correct answer
+        document.getElementById('showCorrect').addEventListener('click', () => {
+            // Paris
+            correctMarker.show(48.8584, 2.2945);
+            correctMarker.startPulseAnimation();
+            updateUI();
+            console.log('Showing correct answer at Paris');
+        });
+
+        // Clear everything
+        document.getElementById('clearAll').addEventListener('click', () => {
+            multiPinManager.clearAllPins();
+            correctMarker.hide();
+            updateUI();
+            console.log('Cleared everything');
+        });
+
+        // Enable inspector
+        await enableInspector(scene);
+
+        updateUI();
+        console.log('Reveal Sequence Test initialized');
+        console.log('Click "Run Scenario" to see a simulated multiplayer reveal');
+    </script>
+</body>
+</html>

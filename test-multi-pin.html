@@ -70,6 +70,7 @@
         import { EarthGlobe } from './src/earthGlobe';
         import { MultiPinManager } from './src/multiPinManager';
         import { getPlayerColor } from './shared/playerColors';
+        import { enableInspector } from './shared/testUtils';
 
         const canvas = document.getElementById('renderCanvas');
 
@@ -170,6 +171,9 @@
         scene.onBeforeRenderObservable.add(() => {
             multiPinManager.updatePinScales();
         });
+
+        // Enable inspector
+        await enableInspector(scene);
 
         console.log('Multi-Pin Test initialized');
         console.log('Click buttons to test pin management');
