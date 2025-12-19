@@ -5,17 +5,21 @@
 
 import { EarthGlobe } from './earthGlobe';
 import { ArcDrawer } from './arcDrawer';
+import { CameraAnimator } from './cameraAnimator';
 import { PLAYER_COLORS } from '../shared/playerColors';
 
 // Initialize EarthGlobe
 const globe = new EarthGlobe('renderCanvas');
 (window as any).earthGlobe = globe;
 
-// Wait for globe to initialize, then set up arc drawer
+// Wait for globe to initialize, then set up arc drawer and camera animator
 setTimeout(() => {
     const scene = globe.getScene();
+    const camera = globe.getCamera();
     const arcDrawer = new ArcDrawer(scene, globe);
+    const cameraAnimator = new CameraAnimator(camera);
     (window as any).arcDrawer = arcDrawer;
+    (window as any).cameraAnimator = cameraAnimator;
 
     // Test locations
     const paris = { lat: 48.8584, lon: 2.2945 }; // Target (correct answer)
@@ -69,8 +73,14 @@ setTimeout(() => {
             );
         });
 
-        updateStatus('Animating arcs...');
-        await arcDrawer.animateArcs(1200);
+        updateStatus('Animating arcs and camera...');
+
+        // Run arc animation and camera animation in parallel
+        await Promise.all([
+            arcDrawer.animateArcs(1200),
+            cameraAnimator.animateToLocation(paris.lat, paris.lon, 6, 1200)
+        ]);
+
         updateStatus('Animation complete!');
     });
 

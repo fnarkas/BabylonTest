@@ -4,6 +4,7 @@
 
 import QRCode from 'qrcode';
 import { EarthGlobe } from '../earthGlobe';
+import { RevealVisualizer } from './revealVisualizer';
 
 interface Player {
     name: string;
@@ -16,6 +17,7 @@ class HostLobby {
     private ws: WebSocket | null = null;
     private players: Player[] = [];
     private globe: EarthGlobe | null = null;
+    private revealVisualizer: RevealVisualizer | null = null;
     private questionOverlay: HTMLElement | null = null;
     private resultsOverlay: HTMLElement | null = null;
 
@@ -109,7 +111,7 @@ class HostLobby {
         };
     }
 
-    private startGame(): void {
+    private async startGame(): Promise<void> {
         const lobbyScreen = document.getElementById('lobbyScreen');
         const gameScreen = document.getElementById('gameScreen');
 
@@ -118,6 +120,14 @@ class HostLobby {
 
         this.globe = new EarthGlobe('renderCanvas');
         (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = this.globe;
+
+        // Initialize reveal visualizer
+        this.revealVisualizer = new RevealVisualizer(
+            this.globe,
+            this.globe.getScene(),
+            this.globe.getCamera()
+        );
+        await this.revealVisualizer.init();
 
         this.createQuestionOverlay();
         this.createResultsOverlay();
@@ -146,7 +156,7 @@ class HostLobby {
         document.querySelector('.globe-container')?.appendChild(this.resultsOverlay);
     }
 
-    private showResults(correct: { name: string; country: string }, results: { name: string; distance: number; points: number }[], players?: Player[]): void {
+    private async showResults(correct: { name: string; country: string; lat: number; lon: number }, results: { name: string; distance: number; points: number; lat: number; lon: number }[], players?: Player[]): Promise<void> {
         if (!this.resultsOverlay) return;
 
         // Hide question overlay
@@ -160,6 +170,15 @@ class HostLobby {
             this.updateLeaderboard();
         }
 
+        // Show visual reveal (pins + arcs) and wait for animation + delay
+        if (this.revealVisualizer) {
+            await this.revealVisualizer.showReveal({
+                correct,
+                results
+            });
+        }
+
+        // Now show the results overlay after the delay
         this.resultsOverlay.innerHTML = `
             <div style="color: rgba(255,255,255,0.7); font-size: 1rem; margin-bottom: 5px;">The answer was</div>
             <div style="color: #e94560; font-size: 2rem; font-weight: bold; margin-bottom: 25px;">
@@ -246,6 +265,11 @@ class HostLobby {
         // Hide results overlay if visible
         if (this.resultsOverlay) {
             this.resultsOverlay.style.display = 'none';
+        }
+
+        // Hide previous reveal visualization
+        if (this.revealVisualizer) {
+            this.revealVisualizer.hideReveal();
         }
 
         const cityEl = this.questionOverlay.querySelector('#cityName');

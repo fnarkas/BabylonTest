@@ -9,7 +9,25 @@
 
 import { WebSocketServer } from 'ws';
 import os from 'os';
+import { appendFileSync, writeFileSync } from 'fs';
 import { getRandomCity, calculateDistance } from './cities.mjs';
+
+// Logging setup
+const LOG_FILE = 'game-server.log';
+writeFileSync(LOG_FILE, ''); // Clear log on startup
+
+function log(message, data = null) {
+    const timestamp = new Date().toISOString();
+    const logLine = data
+        ? `[${timestamp}] ${message} ${JSON.stringify(data)}\n`
+        : `[${timestamp}] ${message}\n`;
+
+    // Write to file
+    appendFileSync(LOG_FILE, logLine);
+
+    // Also print to console
+    process.stdout.write(logLine);
+}
 
 const PORT = 3003;
 const WEB_PORT = 3000; // Vite server port
@@ -57,7 +75,7 @@ function getPlayerList() {
 function startNewRound() {
     answers.clear();
     currentCity = getRandomCity();
-    console.log(`New round: ${currentCity.name}, ${currentCity.country}`);
+    log(`New round: ${currentCity.name}, ${currentCity.country}`);
 
     broadcast({
         type: 'question',
@@ -99,7 +117,7 @@ function checkAllAnswered() {
         r.totalScore = scores.get(r.name);
     });
 
-    console.log('All answered! Results:', results);
+    log('All answered! Results:', results);
 
     broadcast({
         type: 'reveal',
@@ -115,21 +133,21 @@ function checkAllAnswered() {
 }
 
 wss.on('connection', (ws) => {
-    console.log('Client connected');
+    log('Client connected');
     let playerName = null;
     let isHost = false;
 
     ws.on('message', (data) => {
         try {
             const message = JSON.parse(data.toString());
-            console.log('Received:', message);
+            log('Received:', message);
 
             switch (message.type) {
                 case 'host-connect': {
                     isHost = true;
                     hosts.add(ws);
                     const localIP = getLocalIP();
-                    console.log('Host connected, local IP:', localIP);
+                    log('Host connected, local IP:', localIP);
                     ws.send(JSON.stringify({
                         type: 'host-info',
                         localIP,
@@ -152,7 +170,7 @@ wss.on('connection', (ws) => {
                     playerName = message.name;
                     players.push({ name: playerName, isFirst, ws });
 
-                    console.log(`Player joined: ${playerName} (isFirst: ${isFirst})`);
+                    log(`Player joined: ${playerName} (isFirst: ${isFirst})`);
 
                     ws.send(JSON.stringify({
                         type: 'joined',
@@ -172,7 +190,7 @@ wss.on('connection', (ws) => {
                     const player = players.find(p => p.name === playerName);
                     if (player && player.isFirst) {
                         gameStarted = true;
-                        console.log('Game started!');
+                        log('Game started!');
                         broadcast({ type: 'game-start' });
 
                         // Start first round after short delay
@@ -186,7 +204,7 @@ wss.on('connection', (ws) => {
                     if (answers.has(playerName)) return; // Already answered
 
                     answers.set(playerName, { lat: message.lat, lon: message.lon });
-                    console.log(`${playerName} answered: lat=${message.lat}, lon=${message.lon}`);
+                    log(`${playerName} answered: lat=${message.lat}, lon=${message.lon}`);
 
                     // Broadcast that this player answered
                     broadcast({
@@ -201,31 +219,52 @@ wss.on('connection', (ws) => {
 
                 case 'next-round': {
                     const player = players.find(p => p.name === playerName);
+                    log(`next-round request from ${playerName} (isFirst: ${player?.isFirst}, gameStarted: ${gameStarted})`);
                     if (player && player.isFirst && gameStarted) {
-                        console.log('Starting next round...');
+                        log('Starting next round...');
                         startNewRound();
+                    } else {
+                        log(`next-round DENIED - player: ${!!player}, isFirst: ${player?.isFirst}, gameStarted: ${gameStarted}`);
                     }
+                    break;
+                }
+
+                case 'reset-game': {
+                    log('Resetting game state...');
+
+                    // Clear all game state
+                    players.length = 0;
+                    hosts.clear();
+                    gameStarted = false;
+                    currentCity = null;
+                    answers.clear();
+                    scores.clear();
+
+                    // Notify all clients
+                    broadcast({ type: 'game-reset' });
+
+                    log('Game reset complete');
                     break;
                 }
             }
         } catch (err) {
-            console.error('Error parsing message:', err);
+            log('Error parsing message:', err);
         }
     });
 
     ws.on('close', () => {
         if (isHost) {
             hosts.delete(ws);
-            console.log('Host disconnected');
+            log('Host disconnected');
         } else if (playerName) {
             const index = players.findIndex(p => p.name === playerName);
             if (index !== -1) {
                 players.splice(index, 1);
-                console.log(`Player left: ${playerName}`);
+                log(`Player left: ${playerName}`);
 
                 if (players.length > 0 && !players.some(p => p.isFirst)) {
                     players[0].isFirst = true;
-                    console.log(`New host: ${players[0].name}`);
+                    log(`New host: ${players[0].name}`);
                 }
 
                 broadcast({
@@ -234,9 +273,10 @@ wss.on('connection', (ws) => {
                 });
             }
         }
-        console.log('Client disconnected');
+        log('Client disconnected');
     });
 });
 
-console.log(`JordGlobe Party Server running on ws://localhost:${PORT}`);
-console.log('Waiting for players to join...');
+log(`JordGlobe Party Server running on ws://localhost:${PORT}`);
+log(`Logging to ${LOG_FILE}`);
+log('Waiting for players to join...');
