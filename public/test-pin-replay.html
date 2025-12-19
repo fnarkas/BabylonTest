@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pin Replay Animation Test</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100vh;
+        touch-action: none;
+      }
+      #controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 14px;
+        max-width: 300px;
+      }
+      h3 {
+        margin: 0 0 10px 0;
+        color: #4CAF50;
+      }
+      button {
+        margin: 5px 5px 5px 0;
+        padding: 8px 16px;
+        cursor: pointer;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      button:hover {
+        background: #45a049;
+      }
+      button:disabled {
+        background: #666;
+        cursor: not-allowed;
+      }
+      #status {
+        margin-top: 10px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .player-info {
+        margin: 5px 0;
+        padding: 5px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+      }
+      .color-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="controls">
+      <h3>Pin Replay Test</h3>
+      <div style="margin-bottom: 10px;">
+        <div class="player-info">
+          <span class="color-dot" style="background: #FF6B6B;"></span>
+          <strong>Alice:</strong> 25 positions
+        </div>
+        <div class="player-info">
+          <span class="color-dot" style="background: #4ECDC4;"></span>
+          <strong>Bob:</strong> 30 positions
+        </div>
+        <div class="player-info">
+          <span class="color-dot" style="background: #FFE66D;"></span>
+          <strong>Charlie:</strong> 20 positions
+        </div>
+      </div>
+      <button id="playBtn">Play Animations</button>
+      <button id="clearBtn">Clear</button>
+      <div id="status">Ready to play...</div>
+    </div>
+    <script type="module" src="/src/testPinReplay.ts"></script>
+    <!-- Console logger - streams browser console to file for Claude -->
+    <script type="module" src="/shared/consoleLogger.ts"></script>
+  </body>
+</html>

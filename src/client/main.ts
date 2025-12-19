@@ -85,7 +85,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         questionOverlay.style.display = 'block';
     }
 
-    function handleAnswerSubmitted(lat: number, lon: number): void {
+    function handleAnswerSubmitted(lat: number, lon: number, positions?: { lat: number; lon: number; timestamp: number }[]): void {
         if (hasAnswered) {
             console.log('Answer already submitted for this question');
             return;
@@ -94,8 +94,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         hasAnswered = true;
         console.log(`Submitting answer: ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
 
-        // Submit to server
-        socket.submitAnswer(lat, lon);
+        // Submit to server with recorded positions
+        socket.submitAnswer(lat, lon, positions);
 
         // Update UI
         if (questionOverlay) {
@@ -297,7 +297,10 @@ window.addEventListener('DOMContentLoaded', async () => {
                     if (country) {
                         console.log(`Country: ${country.name} (${country.iso2})`);
                     }
-                    handleAnswerSubmitted(latLon.lat, latLon.lon);
+                    // Get recorded positions
+                    const positions = pinManager.getRecordedPositions();
+                    console.log(`Recorded ${positions.length} positions`);
+                    handleAnswerSubmitted(latLon.lat, latLon.lon, positions);
                 });
             }
         });

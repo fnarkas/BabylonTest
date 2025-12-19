@@ -3,6 +3,8 @@
  * Simulates 4 players joining and playing JordGlobe
  */
 
+import { generateBotMovementToTarget } from './botMovementGenerator';
+
 interface BotPlayer {
     name: string;
     ws: WebSocket | null;
@@ -269,13 +271,17 @@ class BotPanel {
                 const baseLat = Math.random() * 180 - 90;  // -90 to 90
                 const baseLon = Math.random() * 360 - 180; // -180 to 180
 
+                // Generate fake movement to this position
+                const positions = generateBotMovementToTarget(baseLat, baseLon, 20 + Math.floor(Math.random() * 15), 1500 + Math.random() * 1000);
+
                 bot.ws.send(JSON.stringify({
                     type: 'submit-answer',
                     lat: baseLat,
-                    lon: baseLon
+                    lon: baseLon,
+                    positions: positions
                 }));
 
-                this.log(`${bot.name} submitted answer: ${baseLat.toFixed(2)}, ${baseLon.toFixed(2)}`, 'info');
+                this.log(`${bot.name} submitted answer: ${baseLat.toFixed(2)}, ${baseLon.toFixed(2)} with ${positions.length} positions`, 'info');
             }
         });
     }
@@ -301,13 +307,17 @@ class BotPanel {
                 const baseLat = Math.random() * 180 - 90;  // -90 to 90
                 const baseLon = Math.random() * 360 - 180; // -180 to 180
 
+                // Generate fake movement to this position
+                const positions = generateBotMovementToTarget(baseLat, baseLon, 20 + Math.floor(Math.random() * 15), 1500 + Math.random() * 1000);
+
                 bot.ws.send(JSON.stringify({
                     type: 'submit-answer',
                     lat: baseLat,
-                    lon: baseLon
+                    lon: baseLon,
+                    positions: positions
                 }));
 
-                this.log(`${bot.name} submitted answer: ${baseLat.toFixed(2)}, ${baseLon.toFixed(2)}`, 'info');
+                this.log(`${bot.name} submitted answer: ${baseLat.toFixed(2)}, ${baseLon.toFixed(2)} with ${positions.length} positions`, 'info');
             }
         });
     }

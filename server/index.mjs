@@ -52,7 +52,7 @@ const players = [];
 const hosts = new Set();
 let gameStarted = false;
 let currentCity = null;
-const answers = new Map(); // playerName -> { lat, lon }
+const answers = new Map(); // playerName -> { lat, lon, positions }
 const scores = new Map();  // playerName -> total score
 let maxRounds = 2; // Default number of rounds
 let currentRound = 0;
@@ -106,7 +106,8 @@ function checkAllAnswered() {
             name: p.name,
             distance: distance,
             lat: answer.lat,
-            lon: answer.lon
+            lon: answer.lon,
+            positions: answer.positions || []
         };
     });
 
@@ -229,8 +230,12 @@ wss.on('connection', (ws) => {
                     if (!gameStarted || !currentCity) return;
                     if (answers.has(playerName)) return; // Already answered
 
-                    answers.set(playerName, { lat: message.lat, lon: message.lon });
-                    log(`${playerName} answered: lat=${message.lat}, lon=${message.lon}`);
+                    answers.set(playerName, {
+                        lat: message.lat,
+                        lon: message.lon,
+                        positions: message.positions || [] // Optional recorded positions
+                    });
+                    log(`${playerName} answered: lat=${message.lat}, lon=${message.lon}, positions=${message.positions ? message.positions.length : 0}`);
 
                     // Broadcast that this player answered
                     broadcast({

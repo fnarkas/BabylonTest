@@ -14,6 +14,7 @@ import { Material } from '@babylonjs/core/Materials/material';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import type { CountryPicker, CountryPolygon, LatLon } from './countryPicker';
 import { cartesianToLatLon } from './countryPicker';
+import { PinRecorder, type RecordedPosition } from './pinRecorder';
 
 const EARTH_RADIUS = 2.0;
 
@@ -35,6 +36,9 @@ export class PinManager {
     private isPlacingMode: boolean = false;
     private hoveredCountry: CountryPolygon | null = null;
 
+    // Pin recording
+    private pinRecorder: PinRecorder;
+
     // Callbacks
     private onPinPlacedCallback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
     private onCountryHoverCallback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
@@ -54,6 +58,7 @@ export class PinManager {
         this.countryPicker = countryPicker;
         this.earthSphere = earthSphere;
         this.createUnlitMaterial = createUnlitMaterial;
+        this.pinRecorder = new PinRecorder();
     }
 
     async init(): Promise<void> {
@@ -80,18 +85,24 @@ export class PinManager {
         document.body.classList.add('placing-mode');
         this.camera.detachControl();
 
+        // Start recording pin movements
+        this.pinRecorder.startRecording();
+
         // Notify that we entered placing mode
         if (this.onPlacingModeChangeCallback) {
             this.onPlacingModeChangeCallback(true);
         }
 
-        console.log('Entered placing mode');
+        console.log('Entered placing mode - recording started');
     }
 
     exitPlacingMode(placePin: boolean = false): void {
         this.isPlacingMode = false;
         document.body.classList.remove('placing-mode');
         this.camera.attachControl(this.canvas, true);
+
+        // Stop recording
+        this.pinRecorder.stopRecording();
 
         // Notify that we exited placing mode
         if (this.onPlacingModeChangeCallback) {
@@ -130,6 +141,20 @@ export class PinManager {
 
     getPreviewPin(): TransformNode | null {
         return this.previewPin;
+    }
+
+    /**
+     * Get the recorded pin positions from the last placement
+     */
+    getRecordedPositions(): RecordedPosition[] {
+        return this.pinRecorder.createRecording('', '', '').positions;
+    }
+
+    /**
+     * Clear the recorded positions
+     */
+    clearRecordedPositions(): void {
+        this.pinRecorder.clear();
     }
 
     private async loadBossPinModel(): Promise<void> {
@@ -251,6 +276,9 @@ export class PinManager {
             // Detect which country the pin is over
             const latLon = cartesianToLatLon(normal.x, normal.y, normal.z);
             const country = this.countryPicker.getCountryAt(latLon);
+
+            // Record this position
+            this.pinRecorder.recordPosition(latLon.lat, latLon.lon);
 
             // Update hovered country and trigger callback if changed
             if (country !== this.hoveredCountry) {

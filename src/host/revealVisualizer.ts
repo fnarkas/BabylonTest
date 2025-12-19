@@ -10,6 +10,8 @@ import type { EarthGlobe } from '../earthGlobe';
 import { MultiPinManager } from '../multiPinManager';
 import { ArcDrawer } from '../arcDrawer';
 import { CameraAnimator } from '../cameraAnimator';
+import { PinReplayAnimator } from '../pinReplayAnimator';
+import type { PinRecording } from '../pinRecorder';
 import { getPlayerColor } from '../../shared/playerColors';
 
 const ARC_ANIMATION_DURATION = 2000; // 2 seconds
@@ -30,6 +32,7 @@ interface RevealData {
         lon: number;
         distance: number;
         points: number;
+        positions?: Array<{ lat: number; lon: number; timestamp: number }>;
     }>;
 }
 
@@ -41,6 +44,7 @@ export class RevealVisualizer {
     private pinManager: MultiPinManager;
     private arcDrawer: ArcDrawer;
     private cameraAnimator: CameraAnimator;
+    private pinReplayAnimator: PinReplayAnimator;
 
     private currentArcIds: string[] = [];
     private animationFrameId: number | null = null;
@@ -59,13 +63,17 @@ export class RevealVisualizer {
 
         this.arcDrawer = new ArcDrawer(scene, globe);
         this.cameraAnimator = new CameraAnimator(camera);
+        this.pinReplayAnimator = new PinReplayAnimator(scene, camera);
     }
 
     /**
      * Initialize the visualizer (load models, etc.)
      */
     async init(): Promise<void> {
-        await this.pinManager.init();
+        await Promise.all([
+            this.pinManager.init(),
+            this.pinReplayAnimator.init()
+        ]);
         console.log('RevealVisualizer initialized');
     }
 
@@ -80,13 +88,21 @@ export class RevealVisualizer {
         // Clear any existing visualization
         this.hideReveal();
 
-        // Step 1: Add player pins (NOT the correct location pin)
+        // Step 1: Replay pin movements (if available)
+        const hasRecordings = data.results.some(r => r.positions && r.positions.length > 0);
+        if (hasRecordings) {
+            console.log('Playing pin movement recordings...');
+            await this.replayPinMovements(data);
+            await this.delay(500); // Brief pause after replay
+        }
+
+        // Step 2: Add player pins at final positions (NOT the correct location pin)
         this.showPlayerPins(data);
 
-        // Step 2: Create arcs (invisible initially)
+        // Step 3: Create arcs (invisible initially)
         this.createArcs(data);
 
-        // Step 3: Animate arcs and camera in parallel after a brief delay
+        // Step 4: Animate arcs and camera in parallel after a brief delay
         await this.delay(ARC_START_DELAY);
         await Promise.all([
             this.animateArcs(ARC_ANIMATION_DURATION),
@@ -107,11 +123,39 @@ export class RevealVisualizer {
     }
 
     /**
+     * Replay pin movements for all players
+     */
+    private async replayPinMovements(data: RevealData): Promise<void> {
+        // Convert results to PinRecording format
+        const recordings: PinRecording[] = data.results
+            .filter(r => r.positions && r.positions.length > 0)
+            .map((result, index) => ({
+                playerId: `player_${result.name}`,
+                playerName: result.name,
+                color: getPlayerColor(index),
+                positions: result.positions!
+            }));
+
+        if (recordings.length === 0) return;
+
+        // Play all recordings simultaneously
+        return new Promise<void>((resolve) => {
+            this.pinReplayAnimator.playRecordings(recordings, () => {
+                console.log('Pin replay animations complete');
+                resolve();
+            });
+        });
+    }
+
+    /**
      * Hide/clear the reveal visualization
      */
     hideReveal(): void {
         // Clear pins
         this.pinManager.clearAllPins();
+
+        // Clear pin replay animations
+        this.pinReplayAnimator.clearAnimations();
 
         // Clear arcs
         this.currentArcIds.forEach(arcId => {

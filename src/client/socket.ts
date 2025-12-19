@@ -71,8 +71,8 @@ export class GameSocket {
         this.send({ type: 'start-game', maxRounds });
     }
 
-    submitAnswer(lat: number, lon: number): void {
-        this.send({ type: 'submit-answer', lat, lon });
+    submitAnswer(lat: number, lon: number, positions?: { lat: number; lon: number; timestamp: number }[]): void {
+        this.send({ type: 'submit-answer', lat, lon, positions });
     }
 
     nextRound(): void {
