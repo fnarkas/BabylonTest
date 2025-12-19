@@ -37,9 +37,32 @@ window.addEventListener('DOMContentLoaded', async () => {
         `;
         questionOverlay.innerHTML = `
             <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-bottom: 5px;">Where is...</div>
-            <div id="cityName" style="color: #e94560; font-size: 1.8rem; font-weight: bold;"></div>
+            <div id="cityName" style="color: #e94560; font-size: 1.8rem; font-weight: bold; margin-bottom: 15px;"></div>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;">
+                <input type="number" id="latInput" placeholder="Lat" step="any" style="width: 80px; padding: 8px; border-radius: 6px; border: 1px solid #e94560; background: rgba(255,255,255,0.1); color: white; text-align: center;">
+                <input type="number" id="lonInput" placeholder="Lon" step="any" style="width: 80px; padding: 8px; border-radius: 6px; border: 1px solid #e94560; background: rgba(255,255,255,0.1); color: white; text-align: center;">
+            </div>
+            <button id="submitAnswer" style="padding: 10px 30px; background: #e94560; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">SUBMIT</button>
+            <div id="answerStatus" style="margin-top: 10px; color: #4CAF50; display: none;">Answer submitted!</div>
         `;
         document.getElementById('gameScreen')?.appendChild(questionOverlay);
+
+        // Set up submit button handler
+        const submitBtn = questionOverlay.querySelector('#submitAnswer') as HTMLButtonElement;
+        submitBtn?.addEventListener('click', () => {
+            const latInput = questionOverlay!.querySelector('#latInput') as HTMLInputElement;
+            const lonInput = questionOverlay!.querySelector('#lonInput') as HTMLInputElement;
+            const lat = parseFloat(latInput.value);
+            const lon = parseFloat(lonInput.value);
+
+            if (!isNaN(lat) && !isNaN(lon)) {
+                socket.submitAnswer(lat, lon);
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'SUBMITTED';
+                const status = questionOverlay!.querySelector('#answerStatus') as HTMLElement;
+                if (status) status.style.display = 'block';
+            }
+        });
     }
 
     function showQuestion(city: string): void {

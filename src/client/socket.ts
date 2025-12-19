@@ -67,6 +67,10 @@ export class GameSocket {
         this.send({ type: 'start-game' });
     }
 
+    submitAnswer(lat: number, lon: number): void {
+        this.send({ type: 'submit-answer', lat, lon });
+    }
+
     on<K extends keyof MessageHandler>(event: K, handler: MessageHandler[K]): void {
         this.handlers[event] = handler;
     }

@@ -128,6 +128,19 @@ wss.on('connection', (ws) => {
                     }
                     break;
                 }
+
+                case 'submit-answer': {
+                    if (!gameStarted || !currentCity) return;
+
+                    console.log(`${playerName} answered: lat=${message.lat}, lon=${message.lon}`);
+
+                    // Broadcast that this player answered
+                    broadcast({
+                        type: 'player-answered',
+                        playerName: playerName
+                    });
+                    break;
+                }
             }
         } catch (err) {
             console.error('Error parsing message:', err);
