@@ -34,6 +34,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     let resultsOverlay: HTMLElement | null = null;
     let finalResultsOverlay: HTMLElement | null = null;
     let confetti: Confetti | null = null;
+    let hasAnswered = false;  // Track if current question has been answered
 
     function createQuestionOverlay(): void {
         questionOverlay = document.createElement('div');
@@ -55,31 +56,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         questionOverlay.innerHTML = `
             <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-bottom: 5px;">Where is...</div>
             <div id="cityName" style="color: #e94560; font-size: 1.8rem; font-weight: bold; margin-bottom: 15px;"></div>
-            <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;">
-                <input type="number" id="latInput" placeholder="Lat" step="any" style="width: 80px; padding: 8px; border-radius: 6px; border: 1px solid #e94560; background: rgba(255,255,255,0.1); color: white; text-align: center;">
-                <input type="number" id="lonInput" placeholder="Lon" step="any" style="width: 80px; padding: 8px; border-radius: 6px; border: 1px solid #e94560; background: rgba(255,255,255,0.1); color: white; text-align: center;">
+            <div id="instructionText" style="color: rgba(255,255,255,0.8); font-size: 0.95rem; margin-bottom: 10px;">
+                📍 Tap the pin button, then tap the globe to place your answer
             </div>
-            <button id="submitAnswer" style="padding: 10px 30px; background: #e94560; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">SUBMIT</button>
-            <div id="answerStatus" style="margin-top: 10px; color: #4CAF50; display: none;">Answer submitted!</div>
+            <div id="answerStatus" style="color: #4CAF50; font-size: 1.1rem; font-weight: bold; display: none;">
+                ✓ Answer submitted!
+            </div>
         `;
         document.getElementById('gameScreen')?.appendChild(questionOverlay);
-
-        // Set up submit button handler
-        const submitBtn = questionOverlay.querySelector('#submitAnswer') as HTMLButtonElement;
-        submitBtn?.addEventListener('click', () => {
-            const latInput = questionOverlay!.querySelector('#latInput') as HTMLInputElement;
-            const lonInput = questionOverlay!.querySelector('#lonInput') as HTMLInputElement;
-            const lat = parseFloat(latInput.value);
-            const lon = parseFloat(lonInput.value);
-
-            if (!isNaN(lat) && !isNaN(lon)) {
-                socket.submitAnswer(lat, lon);
-                submitBtn.disabled = true;
-                submitBtn.textContent = 'SUBMITTED';
-                const status = questionOverlay!.querySelector('#answerStatus') as HTMLElement;
-                if (status) status.style.display = 'block';
-            }
-        });
     }
 
     function showQuestion(city: string): void {
@@ -88,23 +72,38 @@ window.addEventListener('DOMContentLoaded', async () => {
         // Hide results overlay if visible
         if (resultsOverlay) resultsOverlay.style.display = 'none';
 
-        // Reset the submit button
-        const submitBtn = questionOverlay.querySelector('#submitAnswer') as HTMLButtonElement;
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'SUBMIT';
-        }
+        // Reset answer state for new question
+        hasAnswered = false;
+        const instructionText = questionOverlay.querySelector('#instructionText') as HTMLElement;
         const status = questionOverlay.querySelector('#answerStatus') as HTMLElement;
+        if (instructionText) instructionText.style.display = 'block';
         if (status) status.style.display = 'none';
-        const latInput = questionOverlay.querySelector('#latInput') as HTMLInputElement;
-        const lonInput = questionOverlay.querySelector('#lonInput') as HTMLInputElement;
-        if (latInput) latInput.value = '';
-        if (lonInput) lonInput.value = '';
 
         const cityEl = questionOverlay.querySelector('#cityName');
         if (cityEl) cityEl.textContent = city;
 
         questionOverlay.style.display = 'block';
+    }
+
+    function handleAnswerSubmitted(lat: number, lon: number): void {
+        if (hasAnswered) {
+            console.log('Answer already submitted for this question');
+            return;
+        }
+
+        hasAnswered = true;
+        console.log(`Submitting answer: ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
+
+        // Submit to server
+        socket.submitAnswer(lat, lon);
+
+        // Update UI
+        if (questionOverlay) {
+            const instructionText = questionOverlay.querySelector('#instructionText') as HTMLElement;
+            const status = questionOverlay.querySelector('#answerStatus') as HTMLElement;
+            if (instructionText) instructionText.style.display = 'none';
+            if (status) status.style.display = 'block';
+        }
     }
 
     function createResultsOverlay(): void {
@@ -287,6 +286,16 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         globe = new EarthGlobe('renderCanvas');
         (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = globe;
+
+        // Wire up pin placement to answer submission
+        const pinManager = globe.getPinManager();
+        pinManager.onPinPlaced((country, latLon) => {
+            console.log(`Pin placed at ${latLon.lat.toFixed(2)}, ${latLon.lon.toFixed(2)}`);
+            if (country) {
+                console.log(`Country: ${country.name} (${country.iso2})`);
+            }
+            handleAnswerSubmitted(latLon.lat, latLon.lon);
+        });
 
         createQuestionOverlay();
         createResultsOverlay();

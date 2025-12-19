@@ -42,6 +42,7 @@ import { CountryPicker, calculateBoundingBox, cartesianToLatLon, type CountryPol
 import { CountrySelectionBehavior } from './countrySelectionBehavior';
 import { PinManager } from './pinManager';
 import { Game } from './host/game';
+import { CountryLabelUI } from './countryLabelUI';
 
 // Import shaders
 import animatedVertexShader from './shaders/animated.vertex.glsl?raw';
@@ -134,6 +135,10 @@ export class EarthGlobe {
     // Module instances
     private pinManager!: PinManager;  // Handles pin placement
     private game!: Game;  // Handles game logic
+    private countryLabelUI: CountryLabelUI | null = null;  // Optional country label display (work-in-progress feature)
+
+    // Options
+    private options: { showCountryLabel?: boolean };
 
     // UI elements
     private advancedTexture: AdvancedDynamicTexture | null;
@@ -157,6 +162,7 @@ export class EarthGlobe {
     private onCountrySelected: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
     private onCountryHovered: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
     private hoveredCountry: CountryPolygon | null = null;
+    private externalPinCallback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
 
     // State tracking
     private placedPins: AbstractMesh[] = [];
@@ -165,7 +171,8 @@ export class EarthGlobe {
     private countryMeshes: Mesh[] = [];
     private animationWasEnabled: boolean = false;
 
-    constructor(canvasId: string = 'renderCanvas') {
+    constructor(canvasId: string = 'renderCanvas', options?: { showCountryLabel?: boolean }) {
+        this.options = options || {};
         this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
         this.engine = new Engine(this.canvas, true, { preserveDrawingBuffer: false, stencil: true });
         this.scene = new Scene(this.engine);
@@ -256,6 +263,13 @@ export class EarthGlobe {
     }
 
     /**
+     * Get the pin manager
+     */
+    public getPinManager(): PinManager {
+        return this.pinManager;
+    }
+
+    /**
      * Create an unlit material (useful for pins and other objects)
      */
     public createUnlitMaterial(originalMaterial: Material | null): ShaderMaterial {
@@ -336,6 +350,15 @@ export class EarthGlobe {
      */
     public getCountryByISO2(iso2: string): CountryData | undefined {
         return this.countriesData.find(c => c.iso2 === iso2);
+    }
+
+    /**
+     * Set an external callback for pin placement (e.g., for party mode answer submission)
+     * This callback will be called in addition to the internal game callback
+     * @param callback Function called when a pin is placed
+     */
+    public setExternalPinCallback(callback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null): void {
+        this.externalPinCallback = callback;
     }
 
     /**
@@ -466,6 +489,10 @@ export class EarthGlobe {
         // Wire PinManager to Game for pin placement
         this.pinManager.onPinPlaced((country, latLon) => {
             this.game.handlePinPlaced(country, latLon);
+            // Also call external callback if set (e.g., for party mode)
+            if (this.externalPinCallback) {
+                this.externalPinCallback(country, latLon);
+            }
         });
 
         // Wire Game to animate countries when cleared
@@ -480,6 +507,12 @@ export class EarthGlobe {
 
         // Create GUI
         this.createGUI();
+
+        // Optionally create country label UI (work-in-progress feature)
+        if (this.options?.showCountryLabel && this.advancedTexture) {
+            this.countryLabelUI = new CountryLabelUI(this.advancedTexture);
+            this.countryLabelUI.show('Sweden');  // Default example
+        }
 
         // Create country selection behavior (uses advancedTexture from createGUI)
         if (this.advancedTexture) {
@@ -1935,41 +1968,8 @@ export class EarthGlobe {
         this.advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI", true, this.scene);
         this.advancedTexture.background = "";  // Make background transparent
 
-        // Create nine-patch country card at top center
-        const countryCard = new Image("countryCard", "/question_card_simple.png");
-        countryCard.width = "300px";
-        countryCard.height = "100px";
-        countryCard.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-        countryCard.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
-        countryCard.top = "20px";
-        countryCard.isPointerBlocker = false;
-
-        // Set nine-patch stretch mode
-        countryCard.stretch = Image.STRETCH_NINE_PATCH;
-
-        // Set slice values - these are absolute positions from origin for a 101x101 image
-        countryCard.sliceLeft = 10;    // Left border ends at x=10
-        countryCard.sliceRight = 91;   // Right border starts at x=91 (101-10)
-        countryCard.sliceTop = 10;     // Top border ends at y=10
-        countryCard.sliceBottom = 91;  // Bottom border starts at y=91 (101-10)
-
-        // Add card to GUI
-        this.advancedTexture.addControl(countryCard);
-
-        // Create text for the country name (layered on top)
-        const countryText = new TextBlock("countryText", "Sweden");
-        countryText.width = "300px";
-        countryText.height = "100px";
-        countryText.color = "#003366";  // Dark blue color
-        countryText.fontSize = 32;
-        countryText.fontWeight = "bold";
-        countryText.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-        countryText.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
-        countryText.top = "20px";
-        countryText.isPointerBlocker = false;
-
-        // Add text to GUI (on top of the card)
-        this.advancedTexture.addControl(countryText);
+        // Note: Country label (Sweden card) has been moved to CountryLabelUI module
+        // Enable it via constructor option: new EarthGlobe('renderCanvas', { showCountryLabel: true })
 
         // Create pin button FIRST so it appears BEHIND the panel
         // Actual image is 196x900px, scale to 1/2
