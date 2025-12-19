@@ -184,18 +184,18 @@ The user manages all servers manually. Claude should only:
 
 | Server | Port | Started By | Purpose |
 |--------|------|-----------|---------|
-| Vite Dev Server | **3000** | `npm run dev` | Web app hosting |
+| Browser Console Logger | **9999** | `npm run dev` | Browser debugging |
 | WebSocket Game Server | **3003** | `npm run dev` | Multiplayer coordination |
-| Browser Console Logger | **9999** | `npm run log-server` (optional) | Browser debugging |
+| Vite Dev Server | **3000** | `npm run dev` | Web app hosting |
 
 ### Current Running Servers
 
-When you run `npm run dev`, TWO servers start automatically:
+When you run `npm run dev`, THREE servers start automatically:
 
-1. **Vite Dev Server** - http://localhost:3000
-   - Serves the web application
-   - Hot Module Reloading (HMR) - auto-reloads on file changes
-   - Serves: `/party.html` (players), `/host.html` (leaderboard), `/bot-panel.html` (testing)
+1. **Browser Console Log Server** - ws://localhost:9999
+   - Captures browser console output via WebSocket
+   - Writes to `browser-console.log` for Claude to read
+   - Server file: `scripts/log-server.mjs`
 
 2. **WebSocket Game Server** - ws://localhost:3003
    - Manages multiplayer game state
@@ -203,12 +203,10 @@ When you run `npm run dev`, TWO servers start automatically:
    - Server file: `server/index.mjs`
    - **Logging**: Writes to `game-server.log` + stdout
 
-3. **Browser Console Log Server** - ws://localhost:9999 (OPTIONAL)
-   - NOT started by `npm run dev` - must run separately with `npm run log-server`
-   - Captures browser console output via WebSocket
-   - Writes to `browser-console.log` for Claude to read
-   - Server file: `scripts/log-server.mjs`
-   - **Only start this when debugging browser-side issues**
+3. **Vite Dev Server** - http://localhost:3000
+   - Serves the web application
+   - Hot Module Reloading (HMR) - auto-reloads on file changes
+   - Serves: `/party.html` (players), `/host.html` (leaderboard), `/bot-panel.html` (testing)
 
 ### Server Logging Summary
 
@@ -219,8 +217,9 @@ When you run `npm run dev`, TWO servers start automatically:
 | Browser Console | 9999 | `browser-console.log` | `tail -f browser-console.log` |
 
 **Key Points:**
-- **Game Server** now logs to BOTH file and console - easier debugging!
-- **Browser Console Logger** is OPTIONAL (not started by default)
+- **Game Server** logs to BOTH file and console - easier debugging!
+- **Browser Console Logger** now starts automatically with `npm run dev`
+- All three servers start with a single `npm run dev` command
 - Game server log includes detailed message flow with timestamps
 
 **Debugging the Game Server:**
@@ -247,7 +246,7 @@ The development servers are **always running** in the background via `npm run de
 **Auto-Restart Behavior:**
 - Browser code changes (`/src`, `/public`) → Vite HMR (instant, no page reload)
 - Server code changes (`server/index.mjs`) → Node restarts (disconnects WebSocket clients temporarily)
-- Log server changes (`scripts/log-server.mjs`) → Manual restart needed (not watched)
+- Log server changes (`scripts/log-server.mjs`) → Manual restart of `npm run dev` needed (not watched)
 
 ### Claude's Access to Server Output
 

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Control Panel - JordGlobe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .section h2 {
+            color: #444;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .bot-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .bot-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+
+        .bot-card.connected {
+            border-color: #4caf50;
+            background: #f1f8f4;
+        }
+
+        .bot-card.answered {
+            border-color: #2196f3;
+            background: #e3f2fd;
+        }
+
+        .bot-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ccc;
+            display: inline-block;
+        }
+
+        .status-dot.connected {
+            background: #4caf50;
+        }
+
+        .status-dot.answered {
+            background: #2196f3;
+        }
+
+        .bot-status {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        .btn-info {
+            background: #2196f3;
+            color: white;
+        }
+
+        .btn-info:hover:not(:disabled) {
+            background: #0b7dda;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #e68900;
+        }
+
+        .game-info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .game-info h3 {
+            color: #856404;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .game-info p {
+            color: #856404;
+            margin: 4px 0;
+            font-size: 13px;
+        }
+
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+        }
+
+        .log-entry.info {
+            color: #4fc3f7;
+        }
+
+        .log-entry.success {
+            color: #81c784;
+        }
+
+        .log-entry.warning {
+            color: #ffb74d;
+        }
+
+        .log-entry.error {
+            color: #e57373;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Bot Control Panel</h1>
+        <p class="subtitle">Simulate 4 players for testing JordGlobe multiplayer</p>
+
+        <div class="section">
+            <h2>Bot Players</h2>
+            <div class="bot-grid">
+                <div class="bot-card" id="bot-0">
+                    <div class="bot-name">
+                        <span class="status-dot"></span>
+                        Bot Alice
+                    </div>
+                    <div class="bot-status">Disconnected</div>
+                </div>
+                <div class="bot-card" id="bot-1">
+                    <div class="bot-name">
+                        <span class="status-dot"></span>
+                        Bot Bob
+                    </div>
+                    <div class="bot-status">Disconnected</div>
+                </div>
+                <div class="bot-card" id="bot-2">
+                    <div class="bot-name">
+                        <span class="status-dot"></span>
+                        Bot Charlie
+                    </div>
+                    <div class="bot-status">Disconnected</div>
+                </div>
+                <div class="bot-card" id="bot-3">
+                    <div class="bot-name">
+                        <span class="status-dot"></span>
+                        Bot Diana
+                    </div>
+                    <div class="bot-status">Disconnected</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button class="btn-primary" id="join-all">Join All Bots</button>
+                <button class="btn-warning" id="disconnect-all" disabled>Disconnect All</button>
+                <button class="btn-warning" id="reset-game">Reset Game (Restart Server)</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Game Controls</h2>
+
+            <div class="game-info" id="game-info" style="display: none;">
+                <h3>Current Question</h3>
+                <p id="question-text">Waiting for question...</p>
+            </div>
+
+            <div class="controls">
+                <button class="btn-success" id="start-game" disabled>Start Game (Bot Alice)</button>
+                <button class="btn-info" id="submit-answers" disabled>Simulate Answers</button>
+                <button class="btn-success" id="next-round" disabled>Next Round (Bot Alice)</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Activity Log</h2>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <!-- Console logger - streams browser console to file for Claude -->
+    <script type="module" src="/shared/consoleLogger.ts"></script>
+    <script type="module" src="/src/bot-panel.ts"></script>
+</body>
+</html>
