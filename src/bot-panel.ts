@@ -28,6 +28,7 @@ class BotPanel {
     private resetGameBtn = document.getElementById('reset-game') as HTMLButtonElement;
     private startGameBtn = document.getElementById('start-game') as HTMLButtonElement;
     private submitAnswersBtn = document.getElementById('submit-answers') as HTMLButtonElement;
+    private submitAnswersExceptFirstBtn = document.getElementById('submit-answers-except-first') as HTMLButtonElement;
     private nextRoundBtn = document.getElementById('next-round') as HTMLButtonElement;
     private gameInfo = document.getElementById('game-info') as HTMLDivElement;
     private questionText = document.getElementById('question-text') as HTMLParagraphElement;
@@ -44,6 +45,7 @@ class BotPanel {
         this.resetGameBtn.addEventListener('click', () => this.resetGame());
         this.startGameBtn.addEventListener('click', () => this.startGame());
         this.submitAnswersBtn.addEventListener('click', () => this.submitAllAnswers());
+        this.submitAnswersExceptFirstBtn.addEventListener('click', () => this.submitAnswersExceptFirst());
         this.nextRoundBtn.addEventListener('click', () => this.nextRound());
     }
 
@@ -278,6 +280,38 @@ class BotPanel {
         });
     }
 
+    private submitAnswersExceptFirst(): void {
+        if (!this.currentQuestion) {
+            this.log('No active question to answer', 'warning');
+            return;
+        }
+
+        this.log('Submitting answers for all bots except first player...', 'info');
+
+        this.bots.forEach((bot, index) => {
+            // Skip the first bot (index 0 / Bot Alice)
+            if (index === 0) {
+                this.log(`${bot.name} skipped (you can play as this player)`, 'info');
+                return;
+            }
+
+            if (bot.isConnected && bot.ws && !bot.hasAnswered) {
+                // Generate random coordinates with some variance
+                // This simulates "wrong" answers scattered around the globe
+                const baseLat = Math.random() * 180 - 90;  // -90 to 90
+                const baseLon = Math.random() * 360 - 180; // -180 to 180
+
+                bot.ws.send(JSON.stringify({
+                    type: 'submit-answer',
+                    lat: baseLat,
+                    lon: baseLon
+                }));
+
+                this.log(`${bot.name} submitted answer: ${baseLat.toFixed(2)}, ${baseLon.toFixed(2)}`, 'info');
+            }
+        });
+    }
+
     private nextRound(): void {
         const firstBot = this.bots.find(b => b.isFirst);
         if (!firstBot || !firstBot.ws) {
@@ -349,8 +383,9 @@ class BotPanel {
         // Start game button (only if first bot is connected and game not started)
         this.startGameBtn.disabled = !firstBot || !firstBot.isConnected || this.gameStarted;
 
-        // Submit answers button (only if game started and has active question)
+        // Submit answers buttons (only if game started and has active question)
         this.submitAnswersBtn.disabled = !this.gameStarted || !hasQuestion || allAnswered;
+        this.submitAnswersExceptFirstBtn.disabled = !this.gameStarted || !hasQuestion || allAnswered;
 
         // Next round button (only if game started and all answered)
         this.nextRoundBtn.disabled = !this.gameStarted || !hasQuestion || !allAnswered || !firstBot || !firstBot.isConnected;

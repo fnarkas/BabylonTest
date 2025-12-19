@@ -13,6 +13,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     const waitingScreen = new WaitingScreen();
     const socket = new GameSocket();
 
+    // Check for name parameter in URL (e.g., /party.html?name=Bot Alice)
+    const urlParams = new URLSearchParams(window.location.search);
+    const nameFromUrl = urlParams.get('name');
+    if (nameFromUrl) {
+        const nameInput = document.getElementById('nameInput') as HTMLInputElement;
+        if (nameInput) {
+            nameInput.value = nameFromUrl;
+            // Trigger 'input' event to enable the join button
+            nameInput.dispatchEvent(new Event('input'));
+            console.log(`Name prefilled from URL: ${nameFromUrl}`);
+        }
+    }
+
     // Track current player state
     let myName = '';
     let isFirstPlayer = false;

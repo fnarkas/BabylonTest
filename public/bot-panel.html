@@ -304,6 +304,14 @@
                 <input type="number" id="roundCount" min="1" max="20" value="2" />
             </div>
 
+            <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 13px; color: #0c5460;">
+                <strong>💡 Tip:</strong> To play as the first player on mobile, open:<br>
+                <code style="background: rgba(255,255,255,0.7); padding: 2px 6px; border-radius: 3px;">
+                    http://localhost:3000/party.html?name=Bot Alice
+                </code><br>
+                Then use "Simulate All But First" button to have the other bots answer.
+            </div>
+
             <div class="game-info" id="game-info" style="display: none;">
                 <h3>Current Question</h3>
                 <p id="question-text">Waiting for question...</p>
@@ -311,7 +319,8 @@
 
             <div class="controls">
                 <button class="btn-success" id="start-game" disabled>Start Game (Bot Alice)</button>
-                <button class="btn-info" id="submit-answers" disabled>Simulate Answers</button>
+                <button class="btn-info" id="submit-answers" disabled>Simulate All Answers</button>
+                <button class="btn-info" id="submit-answers-except-first" disabled>Simulate All But First</button>
                 <button class="btn-success" id="next-round" disabled>Next Round (Bot Alice)</button>
             </div>
         </div>
