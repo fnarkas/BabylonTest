@@ -284,23 +284,29 @@ window.addEventListener('DOMContentLoaded', async () => {
             gameScreen.style.display = 'block';
         }
 
-        globe = new EarthGlobe('renderCanvas');
-        (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = globe;
+        globe = new EarthGlobe('renderCanvas', {
+            disableSelectionBehavior: true,  // No country hover highlighting on party page
+            onReady: (globe) => {
+                // Globe is now fully initialized, safe to wire up callbacks
+                console.log('Globe ready, wiring pin placement callback');
 
-        // Wire up pin placement to answer submission
-        const pinManager = globe.getPinManager();
-        pinManager.onPinPlaced((country, latLon) => {
-            console.log(`Pin placed at ${latLon.lat.toFixed(2)}, ${latLon.lon.toFixed(2)}`);
-            if (country) {
-                console.log(`Country: ${country.name} (${country.iso2})`);
+                // Wire up pin placement to answer submission
+                const pinManager = globe.getPinManager();
+                pinManager.onPinPlaced((country, latLon) => {
+                    console.log(`Pin placed at ${latLon.lat.toFixed(2)}, ${latLon.lon.toFixed(2)}`);
+                    if (country) {
+                        console.log(`Country: ${country.name} (${country.iso2})`);
+                    }
+                    handleAnswerSubmitted(latLon.lat, latLon.lon);
+                });
             }
-            handleAnswerSubmitted(latLon.lat, latLon.lon);
         });
+
+        (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = globe;
 
         createQuestionOverlay();
         createResultsOverlay();
         createFinalResultsOverlay();
-        console.log('Globe initialized');
     });
 
     // Handle question from server

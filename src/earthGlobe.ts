@@ -41,7 +41,6 @@ import { createWaterMaterial } from './waterShader';
 import { CountryPicker, calculateBoundingBox, cartesianToLatLon, type CountryPolygon, type LatLon } from './countryPicker';
 import { CountrySelectionBehavior } from './countrySelectionBehavior';
 import { PinManager } from './pinManager';
-import { Game } from './host/game';
 import { CountryLabelUI } from './countryLabelUI';
 
 // Import shaders
@@ -110,6 +109,15 @@ interface CountryJSON {
 }
 
 // ============================================================================
+// EARTH GLOBE OPTIONS
+// ============================================================================
+export interface EarthGlobeOptions {
+    onReady?: (globe: EarthGlobe) => void;
+    disableSelectionBehavior?: boolean;
+    showCountryLabel?: boolean;
+}
+
+// ============================================================================
 // EARTH GLOBE CLASS
 // Main class - orchestrates Globe rendering, PinManager, and Game
 // ============================================================================
@@ -134,11 +142,10 @@ export class EarthGlobe {
 
     // Module instances
     private pinManager!: PinManager;  // Handles pin placement
-    private game!: Game;  // Handles game logic
     private countryLabelUI: CountryLabelUI | null = null;  // Optional country label display (work-in-progress feature)
 
     // Options
-    private options: { showCountryLabel?: boolean };
+    private options: EarthGlobeOptions;
 
     // UI elements
     private advancedTexture: AdvancedDynamicTexture | null;
@@ -162,7 +169,6 @@ export class EarthGlobe {
     private onCountrySelected: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
     private onCountryHovered: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
     private hoveredCountry: CountryPolygon | null = null;
-    private externalPinCallback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null = null;
 
     // State tracking
     private placedPins: AbstractMesh[] = [];
@@ -171,7 +177,7 @@ export class EarthGlobe {
     private countryMeshes: Mesh[] = [];
     private animationWasEnabled: boolean = false;
 
-    constructor(canvasId: string = 'renderCanvas', options?: { showCountryLabel?: boolean }) {
+    constructor(canvasId: string = 'renderCanvas', options?: EarthGlobeOptions) {
         this.options = options || {};
         this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
         this.engine = new Engine(this.canvas, true, { preserveDrawingBuffer: false, stencil: true });
@@ -270,6 +276,13 @@ export class EarthGlobe {
     }
 
     /**
+     * Get the selection behavior (for country animations)
+     */
+    public getSelectionBehavior(): CountrySelectionBehavior | null {
+        return this.selectionBehavior;
+    }
+
+    /**
      * Create an unlit material (useful for pins and other objects)
      */
     public createUnlitMaterial(originalMaterial: Material | null): ShaderMaterial {
@@ -350,15 +363,6 @@ export class EarthGlobe {
      */
     public getCountryByISO2(iso2: string): CountryData | undefined {
         return this.countriesData.find(c => c.iso2 === iso2);
-    }
-
-    /**
-     * Set an external callback for pin placement (e.g., for party mode answer submission)
-     * This callback will be called in addition to the internal game callback
-     * @param callback Function called when a pin is placed
-     */
-    public setExternalPinCallback(callback: ((country: CountryPolygon | null, latLon: LatLon) => void) | null): void {
-        this.externalPinCallback = callback;
     }
 
     /**
@@ -480,29 +484,6 @@ export class EarthGlobe {
         );
         await this.pinManager.init();
 
-        // Create Game
-        this.game = new Game();
-        this.game.start();
-
-        this.updateLoadingProgress(85, 'Wiring modules...');
-
-        // Wire PinManager to Game for pin placement
-        this.pinManager.onPinPlaced((country, latLon) => {
-            this.game.handlePinPlaced(country, latLon);
-            // Also call external callback if set (e.g., for party mode)
-            if (this.externalPinCallback) {
-                this.externalPinCallback(country, latLon);
-            }
-        });
-
-        // Wire Game to animate countries when cleared
-        this.game.onCountryCleared((country) => {
-            if (this.selectionBehavior) {
-                this.selectionBehavior.animateToCleared(country.countryIndex);
-                this.selectionBehavior.clearSelectionState();
-            }
-        });
-
         this.updateLoadingProgress(90, 'Setting up UI...');
 
         // Create GUI
@@ -515,7 +496,8 @@ export class EarthGlobe {
         }
 
         // Create country selection behavior (uses advancedTexture from createGUI)
-        if (this.advancedTexture) {
+        // Only create if not disabled via options (party page disables this)
+        if (this.advancedTexture && !this.options.disableSelectionBehavior) {
             this.selectionBehavior = new CountrySelectionBehavior(
                 this.scene,
                 this.advancedTexture,
@@ -563,6 +545,11 @@ export class EarthGlobe {
         });
 
         this.updateLoadingProgress(100, 'Complete!');
+
+        // Call onReady callback if provided
+        if (this.options.onReady) {
+            this.options.onReady(this);
+        }
 
         // Hide loading screen after a short delay
         setTimeout(() => {
