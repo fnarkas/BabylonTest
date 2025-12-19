@@ -300,8 +300,8 @@ export class ArcDrawer {
             arc.material.disableLighting = true;
             arc.mesh.material = arc.material;
 
-            // Make it render on top of the globe
-            arc.mesh.renderingGroupId = 1;
+            // Enable depth testing so arcs properly hide behind globe
+            // (renderingGroupId defaults to 0, same as globe)
         }
 
         // Update visibility based on progress
