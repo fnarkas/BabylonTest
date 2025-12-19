@@ -9,7 +9,7 @@ export interface Player {
 
 export class WaitingScreen {
     private container: HTMLElement;
-    private onStartCallback: (() => void) | null = null;
+    private onStartCallback: ((maxRounds: number) => void) | null = null;
     private playerName: string = '';
 
     constructor() {
@@ -26,6 +26,19 @@ export class WaitingScreen {
                 <h2 id="waitingTitle">Waiting for players...</h2>
                 <ul id="playerList"></ul>
                 <p id="waitingMessage"></p>
+                <div id="roundSettings" style="display: none; margin-bottom: 20px;">
+                    <label for="roundCount" style="color: rgba(255, 255, 255, 0.8); font-size: 1.1rem; display: block; margin-bottom: 10px;">Number of Rounds:</label>
+                    <input type="number" id="roundCount" min="1" max="20" value="2" style="
+                        width: 80px;
+                        padding: 10px 15px;
+                        font-size: 1.2rem;
+                        border-radius: 8px;
+                        border: 2px solid #e94560;
+                        background: rgba(26, 26, 46, 0.8);
+                        color: white;
+                        text-align: center;
+                    " />
+                </div>
                 <button id="startButton">START PARTY</button>
             </div>
         `;
@@ -103,7 +116,9 @@ export class WaitingScreen {
 
         button.addEventListener('click', () => {
             if (this.onStartCallback) {
-                this.onStartCallback();
+                const roundInput = container.querySelector('#roundCount') as HTMLInputElement;
+                const maxRounds = roundInput ? parseInt(roundInput.value) : 2;
+                this.onStartCallback(maxRounds);
             }
         });
 
@@ -117,6 +132,7 @@ export class WaitingScreen {
         const button = this.container.querySelector('#startButton') as HTMLButtonElement;
         const message = this.container.querySelector('#waitingMessage') as HTMLElement;
         const playerList = this.container.querySelector('#playerList') as HTMLElement;
+        const roundSettings = this.container.querySelector('#roundSettings') as HTMLElement;
 
         // Update player list
         this.updatePlayerList(players);
@@ -124,11 +140,13 @@ export class WaitingScreen {
         if (isFirstPlayer) {
             message.textContent = "You're the party host!";
             button.style.display = 'block';
+            roundSettings.style.display = 'block';
         } else {
             const firstPlayer = players.find(p => p.isFirst);
             const hostName = firstPlayer ? firstPlayer.name : 'host';
             message.textContent = `Waiting for ${hostName} to start the game`;
             button.style.display = 'none';
+            roundSettings.style.display = 'none';
         }
     }
 
@@ -166,7 +184,7 @@ export class WaitingScreen {
         this.container.style.display = 'none';
     }
 
-    onStart(callback: () => void): void {
+    onStart(callback: (maxRounds: number) => void): void {
         this.onStartCallback = callback;
     }
 }

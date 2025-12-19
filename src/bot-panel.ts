@@ -159,6 +159,19 @@ class BotPanel {
                 this.updateUI();
                 break;
 
+            case 'final-results':
+                this.log('Game finished! Final results:', 'success');
+                if (message.players) {
+                    const sorted = [...message.players].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+                    sorted.forEach((p: any, i: number) => {
+                        const crown = i === 0 ? '👑 ' : '';
+                        this.log(`${i + 1}. ${crown}${p.name}: ${p.score || 0} points`, i === 0 ? 'success' : 'info');
+                    });
+                }
+                this.gameStarted = false;
+                this.updateUI();
+                break;
+
             case 'player-list':
                 this.log(`Player list updated: ${message.players.map((p: any) => p.name).join(', ')}`, 'info');
                 break;
@@ -229,9 +242,13 @@ class BotPanel {
             return;
         }
 
-        this.log('Starting game...', 'info');
+        const roundInput = document.getElementById('roundCount') as HTMLInputElement;
+        const maxRounds = roundInput ? parseInt(roundInput.value) : 2;
+
+        this.log(`Starting game with ${maxRounds} rounds...`, 'info');
         firstBot.ws.send(JSON.stringify({
-            type: 'start-game'
+            type: 'start-game',
+            maxRounds: maxRounds
         }));
     }
 

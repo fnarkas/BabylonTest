@@ -20,6 +20,7 @@ class HostLobby {
     private revealVisualizer: RevealVisualizer | null = null;
     private questionOverlay: HTMLElement | null = null;
     private resultsOverlay: HTMLElement | null = null;
+    private finalResultsOverlay: HTMLElement | null = null;
 
     constructor() {
         this.connectToServer();
@@ -98,6 +99,10 @@ class HostLobby {
                     case 'reveal':
                         this.showResults(message.correct, message.results, message.players);
                         break;
+
+                    case 'final-results':
+                        this.showFinalResults(message.players);
+                        break;
                 }
             } catch (err) {
                 console.error('Error parsing message:', err);
@@ -131,6 +136,7 @@ class HostLobby {
 
         this.createQuestionOverlay();
         this.createResultsOverlay();
+        this.createFinalResultsOverlay();
         this.players = this.players.map(p => ({ ...p, score: 0 }));
         this.updateLeaderboard();
     }
@@ -359,6 +365,87 @@ class HostLobby {
                 <span class="leaderboard-score">${player.score || 0}</span>
             </li>
         `).join('');
+    }
+
+    private createFinalResultsOverlay(): void {
+        this.finalResultsOverlay = document.createElement('div');
+        this.finalResultsOverlay.id = 'finalResultsOverlay';
+        this.finalResultsOverlay.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 26, 46, 0.98);
+            padding: 50px 60px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 300;
+            border: 2px solid #e94560;
+            display: none;
+            min-width: 500px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        document.querySelector('.globe-container')?.appendChild(this.finalResultsOverlay);
+    }
+
+    private showFinalResults(players: Player[]): void {
+        if (!this.finalResultsOverlay) return;
+
+        // Hide other overlays
+        if (this.questionOverlay) this.questionOverlay.style.display = 'none';
+        if (this.resultsOverlay) this.resultsOverlay.style.display = 'none';
+
+        // Update players
+        this.players = players;
+        this.updateLeaderboard();
+
+        // Sort players by score
+        const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+        const winner = sortedPlayers[0];
+
+        this.finalResultsOverlay.innerHTML = `
+            <div style="color: rgba(255,255,255,0.7); font-size: 1.2rem; margin-bottom: 10px;">Game Over!</div>
+            <div style="color: #e94560; font-size: 3rem; font-weight: bold; margin-bottom: 10px;">
+                <span style="font-size: 3.5rem;">👑</span>
+            </div>
+            <div style="color: #FFD700; font-size: 2.5rem; font-weight: bold; margin-bottom: 30px;">
+                ${winner.name} Wins!
+            </div>
+            <div style="color: rgba(255,255,255,0.6); font-size: 1.1rem; margin-bottom: 30px;">
+                Final Score: ${winner.score} points
+            </div>
+            <div style="text-align: left; margin-top: 30px;">
+                <div style="color: rgba(255,255,255,0.7); font-size: 1.3rem; margin-bottom: 15px; text-align: center;">Final Standings</div>
+                ${sortedPlayers.map((p, i) => `
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        padding: 12px 20px;
+                        margin: 8px 0;
+                        background: ${i === 0 ? 'rgba(255, 215, 0, 0.2)' : i === 1 ? 'rgba(192, 192, 192, 0.2)' : i === 2 ? 'rgba(205, 127, 50, 0.2)' : 'rgba(255,255,255,0.05)'};
+                        border-radius: 10px;
+                        ${i === 0 ? 'border: 1px solid rgba(255, 215, 0, 0.5);' : ''}
+                    ">
+                        <span style="
+                            width: 35px;
+                            height: 35px;
+                            background: ${i === 0 ? 'rgba(255, 215, 0, 0.3)' : i === 1 ? 'rgba(192, 192, 192, 0.3)' : i === 2 ? 'rgba(205, 127, 50, 0.3)' : 'rgba(255,255,255,0.1)'};
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 15px;
+                            font-weight: bold;
+                            color: white;
+                        ">${i + 1}</span>
+                        <span style="flex: 1; color: white; font-size: 1.2rem;">${i === 0 ? '👑 ' : ''}${p.name}</span>
+                        <span style="color: #e94560; font-weight: bold; font-size: 1.2rem;">${p.score}p</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        this.finalResultsOverlay.style.display = 'block';
     }
 }
 

@@ -18,6 +18,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     let globe: EarthGlobe | null = null;
     let questionOverlay: HTMLElement | null = null;
     let resultsOverlay: HTMLElement | null = null;
+    let finalResultsOverlay: HTMLElement | null = null;
 
     function createQuestionOverlay(): void {
         questionOverlay = document.createElement('div');
@@ -166,6 +167,74 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function createFinalResultsOverlay(): void {
+        finalResultsOverlay = document.createElement('div');
+        finalResultsOverlay.id = 'finalResultsOverlay';
+        finalResultsOverlay.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 26, 46, 0.98);
+            padding: 35px 45px;
+            border-radius: 16px;
+            text-align: center;
+            z-index: 300;
+            border: 2px solid #e94560;
+            display: none;
+            min-width: 320px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        document.getElementById('gameScreen')?.appendChild(finalResultsOverlay);
+    }
+
+    function showFinalResults(players: { name: string; score: number }[]): void {
+        if (!finalResultsOverlay) return;
+
+        // Hide other overlays
+        if (questionOverlay) questionOverlay.style.display = 'none';
+        if (resultsOverlay) resultsOverlay.style.display = 'none';
+
+        // Sort players by score
+        const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+        const winner = sortedPlayers[0];
+        const myPosition = sortedPlayers.findIndex(p => p.name === myName) + 1;
+
+        finalResultsOverlay.innerHTML = `
+            <div style="color: rgba(255,255,255,0.7); font-size: 1rem; margin-bottom: 8px;">Game Over!</div>
+            <div style="color: #e94560; font-size: 2.5rem; font-weight: bold; margin-bottom: 8px;">
+                <span style="font-size: 3rem;">👑</span>
+            </div>
+            <div style="color: #FFD700; font-size: 2rem; font-weight: bold; margin-bottom: 15px;">
+                ${winner.name} Wins!
+            </div>
+            <div style="color: rgba(255,255,255,0.6); font-size: 1rem; margin-bottom: 25px;">
+                Final Score: ${winner.score} points
+            </div>
+            <div style="text-align: left; margin-bottom: 20px;">
+                ${sortedPlayers.map((p, i) => `
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        padding: 10px 15px;
+                        margin: 6px 0;
+                        background: ${p.name === myName ? 'rgba(233, 69, 96, 0.3)' : i === 0 ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.05)'};
+                        border-radius: 8px;
+                        ${p.name === myName ? 'border: 1px solid #e94560;' : ''}
+                    ">
+                        <span style="color: white; flex: 1;">${i === 0 ? '👑 ' : ''}${p.name}</span>
+                        <span style="color: #e94560; font-weight: bold;">${p.score}p</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="color: ${myPosition === 1 ? '#FFD700' : 'rgba(255,255,255,0.7)'}; font-size: 1.1rem; font-weight: bold;">
+                You placed ${myPosition}${myPosition === 1 ? 'st' : myPosition === 2 ? 'nd' : myPosition === 3 ? 'rd' : 'th'}!
+            </div>
+        `;
+
+        finalResultsOverlay.style.display = 'block';
+    }
+
     // Set up socket handlers
     socket.on('joined', (data) => {
         myName = data.name;
@@ -202,6 +271,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         createQuestionOverlay();
         createResultsOverlay();
+        createFinalResultsOverlay();
         console.log('Globe initialized');
     });
 
@@ -215,6 +285,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     socket.on('reveal', (data) => {
         console.log('Results revealed:', data);
         showResults(data.correct, data.results);
+    });
+
+    // Handle final results
+    socket.on('final-results', (data) => {
+        console.log('Final results:', data);
+        showFinalResults(data.players);
     });
 
     socket.on('error', (data) => {
@@ -237,9 +313,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Handle start game
-    waitingScreen.onStart(() => {
-        console.log('Starting game...');
-        socket.startGame();
+    waitingScreen.onStart((maxRounds) => {
+        console.log(`Starting game with ${maxRounds} rounds...`);
+        socket.startGame(maxRounds);
     });
 
     console.log('Client app initialized - JoinScreen ready');

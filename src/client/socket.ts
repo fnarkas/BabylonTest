@@ -12,6 +12,7 @@ type MessageHandler = {
     'game-start': () => void;
     'question': (data: { city: string; country: string }) => void;
     'reveal': (data: { correct: { name: string; country: string }; results: { name: string; distance: number; points: number }[] }) => void;
+    'final-results': (data: { players: Player[] }) => void;
     'error': (data: { message: string }) => void;
 };
 
@@ -64,8 +65,8 @@ export class GameSocket {
         this.send({ type: 'join', name });
     }
 
-    startGame(): void {
-        this.send({ type: 'start-game' });
+    startGame(maxRounds?: number): void {
+        this.send({ type: 'start-game', maxRounds });
     }
 
     submitAnswer(lat: number, lon: number): void {

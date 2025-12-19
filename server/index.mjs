@@ -54,6 +54,8 @@ let gameStarted = false;
 let currentCity = null;
 const answers = new Map(); // playerName -> { lat, lon }
 const scores = new Map();  // playerName -> total score
+let maxRounds = 2; // Default number of rounds
+let currentRound = 0;
 
 function broadcast(message) {
     const data = JSON.stringify(message);
@@ -74,13 +76,16 @@ function getPlayerList() {
 
 function startNewRound() {
     answers.clear();
+    currentRound++;
     currentCity = getRandomCity();
-    log(`New round: ${currentCity.name}, ${currentCity.country}`);
+    log(`Round ${currentRound}/${maxRounds}: ${currentCity.name}, ${currentCity.country}`);
 
     broadcast({
         type: 'question',
         city: currentCity.name,
-        country: currentCity.country
+        country: currentCity.country,
+        round: currentRound,
+        maxRounds: maxRounds
     });
 }
 
@@ -128,8 +133,21 @@ function checkAllAnswered() {
             lon: currentCity.lon
         },
         results: results,
-        players: getPlayerList()
+        players: getPlayerList(),
+        round: currentRound,
+        maxRounds: maxRounds
     });
+
+    // Check if game is over
+    if (currentRound >= maxRounds) {
+        setTimeout(() => {
+            log('Game finished! Sending final results...');
+            broadcast({
+                type: 'final-results',
+                players: getPlayerList()
+            });
+        }, 5000); // Wait 5 seconds after reveal before showing final results
+    }
 }
 
 wss.on('connection', (ws) => {
@@ -190,8 +208,16 @@ wss.on('connection', (ws) => {
                     const player = players.find(p => p.name === playerName);
                     if (player && player.isFirst) {
                         gameStarted = true;
-                        log('Game started!');
-                        broadcast({ type: 'game-start' });
+                        currentRound = 0;
+                        scores.clear();
+
+                        // Set max rounds if provided
+                        if (message.maxRounds && message.maxRounds > 0) {
+                            maxRounds = message.maxRounds;
+                        }
+
+                        log(`Game started! Max rounds: ${maxRounds}`);
+                        broadcast({ type: 'game-start', maxRounds });
 
                         // Start first round after short delay
                         setTimeout(() => startNewRound(), 2000);
@@ -219,10 +245,15 @@ wss.on('connection', (ws) => {
 
                 case 'next-round': {
                     const player = players.find(p => p.name === playerName);
-                    log(`next-round request from ${playerName} (isFirst: ${player?.isFirst}, gameStarted: ${gameStarted})`);
+                    log(`next-round request from ${playerName} (isFirst: ${player?.isFirst}, gameStarted: ${gameStarted}, currentRound: ${currentRound}/${maxRounds})`);
+
                     if (player && player.isFirst && gameStarted) {
-                        log('Starting next round...');
-                        startNewRound();
+                        if (currentRound >= maxRounds) {
+                            log('Game already finished - ignoring next-round request');
+                        } else {
+                            log('Starting next round...');
+                            startNewRound();
+                        }
                     } else {
                         log(`next-round DENIED - player: ${!!player}, isFirst: ${player?.isFirst}, gameStarted: ${gameStarted}`);
                     }
@@ -239,6 +270,8 @@ wss.on('connection', (ws) => {
                     currentCity = null;
                     answers.clear();
                     scores.clear();
+                    currentRound = 0;
+                    maxRounds = 2;
 
                     // Notify all clients
                     broadcast({ type: 'game-reset' });
