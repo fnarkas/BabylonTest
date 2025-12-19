@@ -17,6 +17,7 @@ import { Effect } from '@babylonjs/core/Materials/effect';
 import { Material } from '@babylonjs/core/Materials/material';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { CubeTexture } from '@babylonjs/core/Materials/Textures/cubeTexture';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { SceneInstrumentation } from '@babylonjs/core/Instrumentation/sceneInstrumentation';
 import type { Nullable } from '@babylonjs/core/types';
@@ -393,7 +394,7 @@ export class EarthGlobe {
         this.updateLoadingProgress(5, 'Initializing scene...');
 
         // Create scene
-        this.scene.clearColor = new Color4(0.95, 0.95, 0.95, 1);
+        this.scene.clearColor = new Color4(0, 0, 0, 1);  // Black background for space skybox
 
         // Create camera
         this.camera.attachControl(this.canvas, true);
@@ -421,6 +422,9 @@ export class EarthGlobe {
 
         // Create Earth sphere
         this.createEarthSphere();
+
+        // Create skybox
+        this.createSkybox();
 
         // Setup render loop
         this.engine.runRenderLoop(() => {
@@ -683,6 +687,35 @@ export class EarthGlobe {
         // Apply water shader material
         this.waterMaterial = createWaterMaterial(this.scene, "OceanDepthMap.png", "earthWaterMaterial");
         this.earthSphere.material = this.waterMaterial;
+    }
+
+    private createSkybox(): void {
+        // Create skybox - a large cube that surrounds the scene
+        const skybox = MeshBuilder.CreateBox("skyBox", { size: 1000 }, this.scene);
+
+        // Create skybox material
+        const skyboxMaterial = new StandardMaterial("skyBoxMaterial", this.scene);
+        skyboxMaterial.backFaceCulling = false;
+        skyboxMaterial.disableLighting = true;
+
+        // Create reflection texture for the skybox
+        // CubeTexture order: +X, +Y, +Z, -X, -Y, -Z (right, top, front, left, bottom, back)
+        const reflectionTexture = new CubeTexture("", this.scene, null, false, [
+            "/SpaceMidTexture.png",  // positive X (right)
+            "/SpaceTop.png",         // positive Y (top)
+            "/SpaceMidTexture.png",  // positive Z (front)
+            "/SpaceMidTexture.png",  // negative X (left)
+            "/SpaceBottom.png",      // negative Y (bottom)
+            "/SpaceMidTexture.png"   // negative Z (back)
+        ]);
+
+        reflectionTexture.coordinatesMode = Texture.SKYBOX_MODE;
+        skyboxMaterial.reflectionTexture = reflectionTexture;
+
+        skybox.material = skyboxMaterial;
+        skybox.infiniteDistance = true;  // Skybox follows camera
+
+        console.log('Skybox created with space textures');
     }
 
     private latLonToSphere(lat: number, lon: number, altitude: number = 0): Vector3 {
