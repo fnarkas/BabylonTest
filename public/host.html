@@ -13,9 +13,16 @@
         margin: 0;
         padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        background: #000;
         min-height: 100vh;
         color: white;
+        overflow: hidden;
+      }
+
+      /* Lobby screen */
+      #lobbyScreen {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        min-height: 100vh;
       }
 
       .lobby-container {
@@ -85,13 +92,13 @@
         color: white;
       }
 
-      #playerList {
+      #lobbyPlayerList {
         list-style: none;
         padding: 0;
         margin: 0;
       }
 
-      #playerList li {
+      #lobbyPlayerList li {
         font-size: 1.3rem;
         padding: 15px 25px;
         margin: 10px 0;
@@ -102,7 +109,7 @@
         gap: 10px;
       }
 
-      #playerList li.host {
+      #lobbyPlayerList li.host {
         background: rgba(233, 69, 96, 0.3);
         border: 2px solid #e94560;
       }
@@ -140,29 +147,137 @@
         text-transform: uppercase;
         margin-left: auto;
       }
+
+      /* Game screen */
+      #gameScreen {
+        display: none;
+        width: 100%;
+        height: 100vh;
+      }
+
+      .game-layout {
+        display: flex;
+        width: 100%;
+        height: 100%;
+      }
+
+      .globe-container {
+        flex: 1;
+        height: 100%;
+        position: relative;
+      }
+
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+
+      .leaderboard-container {
+        width: 350px;
+        height: 100%;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        padding: 30px;
+        overflow-y: auto;
+      }
+
+      .leaderboard-container h2 {
+        color: #e94560;
+        font-size: 1.8rem;
+        margin: 0 0 30px 0;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+
+      #leaderboard {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      #leaderboard li {
+        display: flex;
+        align-items: center;
+        padding: 15px 20px;
+        margin: 10px 0;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        font-size: 1.2rem;
+      }
+
+      #leaderboard li:nth-child(1) {
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 215, 0, 0.1));
+        border: 1px solid rgba(255, 215, 0, 0.5);
+      }
+
+      #leaderboard li:nth-child(2) {
+        background: linear-gradient(135deg, rgba(192, 192, 192, 0.3), rgba(192, 192, 192, 0.1));
+        border: 1px solid rgba(192, 192, 192, 0.5);
+      }
+
+      #leaderboard li:nth-child(3) {
+        background: linear-gradient(135deg, rgba(205, 127, 50, 0.3), rgba(205, 127, 50, 0.1));
+        border: 1px solid rgba(205, 127, 50, 0.5);
+      }
+
+      .leaderboard-rank {
+        width: 35px;
+        height: 35px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        margin-right: 15px;
+      }
+
+      .leaderboard-name {
+        flex: 1;
+      }
+
+      .leaderboard-score {
+        font-weight: bold;
+        color: #e94560;
+      }
     </style>
   </head>
   <body>
-    <div class="lobby-container">
-      <h1>JordGlobe Party</h1>
-      <p class="subtitle">Scan to join the game!</p>
+    <div id="lobbyScreen">
+      <div class="lobby-container">
+        <h1>JordGlobe Party</h1>
+        <p class="subtitle">Scan to join the game!</p>
 
-      <div class="main-content">
-        <div class="qr-section">
-          <h2>Join the Party</h2>
-          <div id="qrCode"></div>
-          <p class="join-url" id="joinUrl"></p>
+        <div class="main-content">
+          <div class="qr-section">
+            <h2>Join the Party</h2>
+            <div id="qrCode"></div>
+            <p class="join-url" id="joinUrl"></p>
+          </div>
+
+          <div class="players-section">
+            <h2>Players</h2>
+            <ul id="lobbyPlayerList">
+              <li class="no-players">Waiting for players to join...</li>
+            </ul>
+          </div>
         </div>
 
-        <div class="players-section">
-          <h2>Players</h2>
-          <ul id="playerList">
-            <li class="no-players">Waiting for players to join...</li>
-          </ul>
+        <p id="waitingMessage"></p>
+      </div>
+    </div>
+
+    <div id="gameScreen">
+      <div class="game-layout">
+        <div class="globe-container">
+          <canvas id="renderCanvas"></canvas>
+        </div>
+        <div class="leaderboard-container">
+          <h2>Leaderboard</h2>
+          <ul id="leaderboard"></ul>
         </div>
       </div>
-
-      <p id="waitingMessage"></p>
     </div>
 
     <script type="module" src="/src/host/lobby.ts"></script>

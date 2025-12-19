@@ -4,6 +4,7 @@
 import { JoinScreen } from './JoinScreen';
 import { WaitingScreen } from './WaitingScreen';
 import { GameSocket } from './socket';
+import { EarthGlobe } from '../earthGlobe';
 
 // Initialize the application when page loads
 window.addEventListener('DOMContentLoaded', async () => {
@@ -14,6 +15,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Track current player state
     let myName = '';
     let isFirstPlayer = false;
+    let globe: EarthGlobe | null = null;
 
     // Set up socket handlers
     socket.on('joined', (data) => {
@@ -21,7 +23,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         isFirstPlayer = data.isFirst;
 
         // Hide join screen, show waiting screen
-        const joinContainer = document.querySelector('.join-container') as HTMLElement;
+        const joinContainer = document.getElementById('joinScreen');
         if (joinContainer) {
             joinContainer.style.display = 'none';
         }
@@ -42,7 +44,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     socket.on('game-start', () => {
         console.log('Game starting!');
         waitingScreen.hide();
-        // TODO: Show the globe for gameplay
+
+        // Show game screen with globe
+        const gameScreen = document.getElementById('gameScreen');
+        if (gameScreen) {
+            gameScreen.style.display = 'block';
+        }
+
+        // Initialize the globe
+        globe = new EarthGlobe('renderCanvas');
+        (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = globe;
+        console.log('Globe initialized');
     });
 
     socket.on('error', (data) => {

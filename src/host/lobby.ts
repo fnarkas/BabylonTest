@@ -1,17 +1,20 @@
 /**
- * Host Lobby - Shows QR code and player list
+ * Host Lobby - Shows QR code and player list, then game with globe + leaderboard
  */
 
 import QRCode from 'qrcode';
+import { EarthGlobe } from '../earthGlobe';
 
 interface Player {
     name: string;
     isFirst: boolean;
+    score?: number;
 }
 
 class HostLobby {
     private ws: WebSocket | null = null;
     private players: Player[] = [];
+    private globe: EarthGlobe | null = null;
 
     constructor() {
         this.connectToServer();
@@ -73,17 +76,18 @@ class HostLobby {
                         // Generate QR code with the server's local IP
                         this.generateQRCode(message.localIP, message.webPort);
                         this.players = message.players;
-                        this.updatePlayerList();
+                        this.updateLobbyPlayerList();
                         this.updateWaitingMessage();
                         break;
                     case 'player-list':
                         this.players = message.players;
-                        this.updatePlayerList();
+                        this.updateLobbyPlayerList();
                         this.updateWaitingMessage();
+                        this.updateLeaderboard();
                         break;
                     case 'game-start':
                         console.log('Game starting!');
-                        // TODO: Transition to game view
+                        this.startGame();
                         break;
                 }
             } catch (err) {
@@ -102,8 +106,30 @@ class HostLobby {
         };
     }
 
-    private updatePlayerList(): void {
-        const listElement = document.getElementById('playerList');
+    private startGame(): void {
+        // Hide lobby, show game screen
+        const lobbyScreen = document.getElementById('lobbyScreen');
+        const gameScreen = document.getElementById('gameScreen');
+
+        if (lobbyScreen) {
+            lobbyScreen.style.display = 'none';
+        }
+        if (gameScreen) {
+            gameScreen.style.display = 'block';
+        }
+
+        // Initialize the globe
+        this.globe = new EarthGlobe('renderCanvas');
+        (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = this.globe;
+        console.log('Globe initialized');
+
+        // Initialize scores for all players
+        this.players = this.players.map(p => ({ ...p, score: 0 }));
+        this.updateLeaderboard();
+    }
+
+    private updateLobbyPlayerList(): void {
+        const listElement = document.getElementById('lobbyPlayerList');
         if (!listElement) return;
 
         if (this.players.length === 0) {
@@ -133,6 +159,22 @@ class HostLobby {
         if (hostPlayer) {
             messageElement.textContent = `Waiting for ${hostPlayer.name} to start the party...`;
         }
+    }
+
+    private updateLeaderboard(): void {
+        const listElement = document.getElementById('leaderboard');
+        if (!listElement) return;
+
+        // Sort by score (highest first)
+        const sortedPlayers = [...this.players].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+        listElement.innerHTML = sortedPlayers.map((player, index) => `
+            <li>
+                <span class="leaderboard-rank">${index + 1}</span>
+                <span class="leaderboard-name">${player.name}</span>
+                <span class="leaderboard-score">${player.score || 0}</span>
+            </li>
+        `).join('');
     }
 }
 
