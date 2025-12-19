@@ -221,11 +221,30 @@ In these cases:
 3. User tests in browser and reports behavior
 4. User reports any browser console errors or warnings
 
+### Browser Console Logging
+
+**Claude can see browser console logs!**
+
+A WebSocket-based console logger captures `console.log/error/warn` and streams them to a file Claude can read.
+
+**IMPORTANT: When creating new HTML pages, add this script tag:**
+```html
+<!-- Console logger - streams browser console to file for Claude -->
+<script type="module" src="/shared/consoleLogger.ts"></script>
+```
+
+Add it at the end of `<body>`, after other scripts.
+
+**Setup:**
+1. Log server runs with: `npm run log-server`
+2. Pages with the script tag auto-connect
+3. Claude reads logs from `browser-console.log`
+
 ### Reporting Issues
 
 When reporting issues from the browser, please include:
 - **Behavior**: What happened vs. what was expected
-- **Console errors**: Any errors or warnings in the browser console
+- **Console errors**: Any errors or warnings (Claude can now see these automatically!)
 - **Steps to reproduce**: What actions triggered the issue
 
 ## Babylon.js Common Pitfalls

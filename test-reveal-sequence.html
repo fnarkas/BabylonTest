@@ -117,7 +117,7 @@
         );
         await multiPinManager.init();
 
-        const correctMarker = new CorrectLocationMarker(scene, camera);
+        const correctMarker = new CorrectLocationMarker(scene, camera, earthGlobe);
 
         // Update scales in render loop
         scene.onBeforeRenderObservable.add(() => {
@@ -219,5 +219,8 @@
         console.log('Reveal Sequence Test initialized');
         console.log('Click "Run Scenario" to see a simulated multiplayer reveal');
     </script>
+
+    <!-- Console logger - streams browser console to file for Claude -->
+    <script type="module" src="/shared/consoleLogger.ts"></script>
 </body>
 </html>

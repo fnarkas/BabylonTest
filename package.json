@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "log-server": "node scripts/log-server.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "node test_neighbors_new.cjs",
@@ -23,6 +24,7 @@
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/gui": "^7.54.3",
-    "@babylonjs/loaders": "^7.54.3"
+    "@babylonjs/loaders": "^7.54.3",
+    "ws": "^8.18.3"
   }
 }
