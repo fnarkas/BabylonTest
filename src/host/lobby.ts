@@ -17,6 +17,7 @@ class HostLobby {
     private players: Player[] = [];
     private globe: EarthGlobe | null = null;
     private questionOverlay: HTMLElement | null = null;
+    private resultsOverlay: HTMLElement | null = null;
 
     constructor() {
         this.connectToServer();
@@ -91,6 +92,10 @@ class HostLobby {
                     case 'player-answered':
                         this.markPlayerAnswered(message.playerName);
                         break;
+
+                    case 'reveal':
+                        this.showResults(message.correct, message.results);
+                        break;
                 }
             } catch (err) {
                 console.error('Error parsing message:', err);
@@ -115,8 +120,76 @@ class HostLobby {
         (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = this.globe;
 
         this.createQuestionOverlay();
+        this.createResultsOverlay();
         this.players = this.players.map(p => ({ ...p, score: 0 }));
         this.updateLeaderboard();
+    }
+
+    private createResultsOverlay(): void {
+        this.resultsOverlay = document.createElement('div');
+        this.resultsOverlay.id = 'resultsOverlay';
+        this.resultsOverlay.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(26, 26, 46, 0.98);
+            padding: 30px 50px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 200;
+            border: 2px solid #e94560;
+            display: none;
+            min-width: 450px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        document.querySelector('.globe-container')?.appendChild(this.resultsOverlay);
+    }
+
+    private showResults(correct: { name: string; country: string }, results: { name: string; distance: number }[]): void {
+        if (!this.resultsOverlay) return;
+
+        // Hide question overlay
+        if (this.questionOverlay) {
+            this.questionOverlay.style.display = 'none';
+        }
+
+        this.resultsOverlay.innerHTML = `
+            <div style="color: rgba(255,255,255,0.7); font-size: 1rem; margin-bottom: 5px;">The answer was</div>
+            <div style="color: #e94560; font-size: 2rem; font-weight: bold; margin-bottom: 25px;">
+                ${correct.name}, ${correct.country}
+            </div>
+            <div style="text-align: left;">
+                ${results.map((r, i) => `
+                    <div style="
+                        display: flex;
+                        align-items: center;
+                        padding: 12px 20px;
+                        margin: 8px 0;
+                        background: ${i === 0 ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.05)'};
+                        border-radius: 10px;
+                        ${i === 0 ? 'border: 1px solid rgba(255, 215, 0, 0.5);' : ''}
+                    ">
+                        <span style="
+                            width: 30px;
+                            height: 30px;
+                            background: ${i === 0 ? 'rgba(255, 215, 0, 0.3)' : i === 1 ? 'rgba(192, 192, 192, 0.3)' : i === 2 ? 'rgba(205, 127, 50, 0.3)' : 'rgba(255,255,255,0.1)'};
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-right: 15px;
+                            font-weight: bold;
+                            color: white;
+                        ">${i + 1}</span>
+                        <span style="flex: 1; color: white; font-size: 1.1rem;">${r.name}</span>
+                        <span style="color: ${i === 0 ? '#4CAF50' : 'rgba(255,255,255,0.7)'}; font-weight: bold;">${r.distance.toLocaleString()} km</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        this.resultsOverlay.style.display = 'block';
     }
 
     private createQuestionOverlay(): void {

@@ -9,7 +9,7 @@
 
 import { WebSocketServer } from 'ws';
 import os from 'os';
-import { getRandomCity } from './cities.mjs';
+import { getRandomCity, calculateDistance } from './cities.mjs';
 
 const PORT = 3003;
 const WEB_PORT = 3000; // Vite server port
@@ -34,6 +34,7 @@ const players = [];
 const hosts = new Set();
 let gameStarted = false;
 let currentCity = null;
+const answers = new Map(); // playerName -> { lat, lon }
 
 function broadcast(message) {
     const data = JSON.stringify(message);
@@ -52,6 +53,7 @@ function getPlayerList() {
 }
 
 function startNewRound() {
+    answers.clear();
     currentCity = getRandomCity();
     console.log(`New round: ${currentCity.name}, ${currentCity.country}`);
 
@@ -59,6 +61,44 @@ function startNewRound() {
         type: 'question',
         city: currentCity.name,
         country: currentCity.country
+    });
+}
+
+function checkAllAnswered() {
+    if (players.length === 0) return;
+
+    const allAnswered = players.every(p => answers.has(p.name));
+    if (!allAnswered) return;
+
+    // Calculate results
+    const results = players.map(p => {
+        const answer = answers.get(p.name);
+        const distance = calculateDistance(
+            currentCity.lat, currentCity.lon,
+            answer.lat, answer.lon
+        );
+        return {
+            name: p.name,
+            distance: distance,
+            lat: answer.lat,
+            lon: answer.lon
+        };
+    });
+
+    // Sort by distance (closest first)
+    results.sort((a, b) => a.distance - b.distance);
+
+    console.log('All answered! Results:', results);
+
+    broadcast({
+        type: 'reveal',
+        correct: {
+            name: currentCity.name,
+            country: currentCity.country,
+            lat: currentCity.lat,
+            lon: currentCity.lon
+        },
+        results: results
     });
 }
 
@@ -131,7 +171,9 @@ wss.on('connection', (ws) => {
 
                 case 'submit-answer': {
                     if (!gameStarted || !currentCity) return;
+                    if (answers.has(playerName)) return; // Already answered
 
+                    answers.set(playerName, { lat: message.lat, lon: message.lon });
                     console.log(`${playerName} answered: lat=${message.lat}, lon=${message.lon}`);
 
                     // Broadcast that this player answered
@@ -139,6 +181,9 @@ wss.on('connection', (ws) => {
                         type: 'player-answered',
                         playerName: playerName
                     });
+
+                    // Check if all players have answered
+                    checkAllAnswered();
                     break;
                 }
             }
