@@ -243,6 +243,11 @@ class HostLobby {
     private showQuestion(city: string): void {
         if (!this.questionOverlay) return;
 
+        // Hide results overlay if visible
+        if (this.resultsOverlay) {
+            this.resultsOverlay.style.display = 'none';
+        }
+
         const cityEl = this.questionOverlay.querySelector('#cityName');
         if (cityEl) cityEl.textContent = city;
 

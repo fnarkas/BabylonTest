@@ -198,6 +198,15 @@ wss.on('connection', (ws) => {
                     checkAllAnswered();
                     break;
                 }
+
+                case 'next-round': {
+                    const player = players.find(p => p.name === playerName);
+                    if (player && player.isFirst && gameStarted) {
+                        console.log('Starting next round...');
+                        startNewRound();
+                    }
+                    break;
+                }
             }
         } catch (err) {
             console.error('Error parsing message:', err);

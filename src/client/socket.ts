@@ -11,6 +11,7 @@ type MessageHandler = {
     'player-list': (data: { players: Player[] }) => void;
     'game-start': () => void;
     'question': (data: { city: string; country: string }) => void;
+    'reveal': (data: { correct: { name: string; country: string }; results: { name: string; distance: number; points: number }[] }) => void;
     'error': (data: { message: string }) => void;
 };
 
@@ -69,6 +70,10 @@ export class GameSocket {
 
     submitAnswer(lat: number, lon: number): void {
         this.send({ type: 'submit-answer', lat, lon });
+    }
+
+    nextRound(): void {
+        this.send({ type: 'next-round' });
     }
 
     on<K extends keyof MessageHandler>(event: K, handler: MessageHandler[K]): void {
