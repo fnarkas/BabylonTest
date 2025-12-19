@@ -70,7 +70,7 @@ setTimeout(() => {
         });
 
         updateStatus('Animating arcs...');
-        await arcDrawer.animateArcs(2000);
+        await arcDrawer.animateArcs(1200);
         updateStatus('Animation complete!');
     });
 
