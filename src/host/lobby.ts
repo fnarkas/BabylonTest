@@ -5,6 +5,7 @@
 import QRCode from 'qrcode';
 import { EarthGlobe } from '../earthGlobe';
 import { RevealVisualizer } from './revealVisualizer';
+import { Confetti } from '../confetti';
 
 interface Player {
     name: string;
@@ -21,6 +22,7 @@ class HostLobby {
     private questionOverlay: HTMLElement | null = null;
     private resultsOverlay: HTMLElement | null = null;
     private finalResultsOverlay: HTMLElement | null = null;
+    private confetti: Confetti | null = null;
 
     constructor() {
         this.connectToServer();
@@ -402,6 +404,10 @@ class HostLobby {
         // Sort players by score
         const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
         const winner = sortedPlayers[0];
+
+        // Start confetti celebration!
+        this.confetti = new Confetti();
+        this.confetti.start(4000); // 4 seconds of confetti
 
         this.finalResultsOverlay.innerHTML = `
             <div style="color: rgba(255,255,255,0.7); font-size: 1.2rem; margin-bottom: 10px;">Game Over!</div>

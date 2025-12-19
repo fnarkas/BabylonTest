@@ -5,6 +5,7 @@ import { JoinScreen } from './JoinScreen';
 import { WaitingScreen } from './WaitingScreen';
 import { GameSocket } from './socket';
 import { EarthGlobe } from '../earthGlobe';
+import { Confetti } from '../confetti';
 
 // Initialize the application when page loads
 window.addEventListener('DOMContentLoaded', async () => {
@@ -19,6 +20,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     let questionOverlay: HTMLElement | null = null;
     let resultsOverlay: HTMLElement | null = null;
     let finalResultsOverlay: HTMLElement | null = null;
+    let confetti: Confetti | null = null;
 
     function createQuestionOverlay(): void {
         questionOverlay = document.createElement('div');
@@ -199,6 +201,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         const sortedPlayers = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
         const winner = sortedPlayers[0];
         const myPosition = sortedPlayers.findIndex(p => p.name === myName) + 1;
+
+        // Start confetti celebration!
+        confetti = new Confetti();
+        confetti.start(4000); // 4 seconds of confetti
 
         finalResultsOverlay.innerHTML = `
             <div style="color: rgba(255,255,255,0.7); font-size: 1rem; margin-bottom: 8px;">Game Over!</div>
