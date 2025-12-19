@@ -125,7 +125,7 @@ class HostLobby {
         if (lobbyScreen) lobbyScreen.style.display = 'none';
         if (gameScreen) gameScreen.style.display = 'block';
 
-        this.globe = new EarthGlobe('renderCanvas');
+        this.globe = new EarthGlobe('renderCanvas', { showPinUI: false });
         (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = this.globe;
 
         // Initialize reveal visualizer

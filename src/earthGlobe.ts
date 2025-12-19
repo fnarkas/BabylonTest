@@ -115,6 +115,7 @@ export interface EarthGlobeOptions {
     onReady?: (globe: EarthGlobe) => void;
     disableSelectionBehavior?: boolean;
     showCountryLabel?: boolean;
+    showPinUI?: boolean;  // Show pin button and bottom panel (default: true)
 }
 
 // ============================================================================
@@ -1958,40 +1959,43 @@ export class EarthGlobe {
         // Note: Country label (Sweden card) has been moved to CountryLabelUI module
         // Enable it via constructor option: new EarthGlobe('renderCanvas', { showCountryLabel: true })
 
-        // Create pin button FIRST so it appears BEHIND the panel
-        // Actual image is 196x900px, scale to 1/2
-        const pinScale = 0.5;
-        this.pinButtonImage = new Image("pinButton", "/DefaultPin.png");
-        this.pinButtonImage.width = `${196 * pinScale}px`;
-        this.pinButtonImage.height = `${900 * pinScale}px`;
-        this.pinButtonImage.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
-        this.pinButtonImage.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
-        this.pinButtonImage.top = "170px";  // Way down - negative means up from bottom
-        this.pinButtonImage.left = "50px";   // Slight offset to the right
-        this.pinButtonImage.rotation = 0.14; // 8 degrees in radians
+        // Conditionally create pin UI (button and panel) - default is true for backward compatibility
+        if (this.options.showPinUI !== false) {
+            // Create pin button FIRST so it appears BEHIND the panel
+            // Actual image is 196x900px, scale to 1/2
+            const pinScale = 0.5;
+            this.pinButtonImage = new Image("pinButton", "/DefaultPin.png");
+            this.pinButtonImage.width = `${196 * pinScale}px`;
+            this.pinButtonImage.height = `${900 * pinScale}px`;
+            this.pinButtonImage.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
+            this.pinButtonImage.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+            this.pinButtonImage.top = "170px";  // Way down - negative means up from bottom
+            this.pinButtonImage.left = "50px";   // Slight offset to the right
+            this.pinButtonImage.rotation = 0.14; // 8 degrees in radians
 
-        // Make it interactive
-        this.pinButtonImage.isPointerBlocker = true;
+            // Make it interactive
+            this.pinButtonImage.isPointerBlocker = true;
 
-        // Add pin to GUI FIRST (so it's behind)
-        this.advancedTexture.addControl(this.pinButtonImage);
+            // Add pin to GUI FIRST (so it's behind)
+            this.advancedTexture.addControl(this.pinButtonImage);
 
-        // Create bottom panel AFTER pin (so it's in front)
-        this.bottomPanel = new Rectangle("bottomPanel");
-        this.bottomPanel.width = "600px";
-        this.bottomPanel.height = "150px";
-        this.bottomPanel.thickness = 0;
-        this.bottomPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
-        this.bottomPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
-        this.bottomPanel.top = "30px";
+            // Create bottom panel AFTER pin (so it's in front)
+            this.bottomPanel = new Rectangle("bottomPanel");
+            this.bottomPanel.width = "600px";
+            this.bottomPanel.height = "150px";
+            this.bottomPanel.thickness = 0;
+            this.bottomPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
+            this.bottomPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+            this.bottomPanel.top = "30px";
 
-        // Solid blue color - no transparency
-        this.bottomPanel.background = "#6496DC";  // Blue color
-        this.bottomPanel.alpha = 1.0;  // Fully opaque
-        this.bottomPanel.cornerRadius = 60;
+            // Solid blue color - no transparency
+            this.bottomPanel.background = "#6496DC";  // Blue color
+            this.bottomPanel.alpha = 1.0;  // Fully opaque
+            this.bottomPanel.cornerRadius = 60;
 
-        // Add panel to GUI AFTER pin (so it's in front)
-        this.advancedTexture.addControl(this.bottomPanel);
+            // Add panel to GUI AFTER pin (so it's in front)
+            this.advancedTexture.addControl(this.bottomPanel);
+        }
 
         console.log('GUI created with fixed sizing (matching original DOM layout)');
     }
