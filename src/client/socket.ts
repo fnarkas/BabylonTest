@@ -10,6 +10,7 @@ type MessageHandler = {
     'joined': (data: { name: string; isFirst: boolean; players: Player[] }) => void;
     'player-list': (data: { players: Player[] }) => void;
     'game-start': () => void;
+    'question': (data: { city: string; country: string }) => void;
     'error': (data: { message: string }) => void;
 };
 

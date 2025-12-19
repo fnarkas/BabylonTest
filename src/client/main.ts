@@ -16,13 +16,46 @@ window.addEventListener('DOMContentLoaded', async () => {
     let myName = '';
     let isFirstPlayer = false;
     let globe: EarthGlobe | null = null;
+    let questionOverlay: HTMLElement | null = null;
+
+    function createQuestionOverlay(): void {
+        questionOverlay = document.createElement('div');
+        questionOverlay.id = 'questionOverlay';
+        questionOverlay.style.cssText = `
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(26, 26, 46, 0.95);
+            padding: 15px 30px;
+            border-radius: 12px;
+            text-align: center;
+            z-index: 100;
+            border: 2px solid #e94560;
+            display: none;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        questionOverlay.innerHTML = `
+            <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-bottom: 5px;">Where is...</div>
+            <div id="cityName" style="color: #e94560; font-size: 1.8rem; font-weight: bold;"></div>
+        `;
+        document.getElementById('gameScreen')?.appendChild(questionOverlay);
+    }
+
+    function showQuestion(city: string): void {
+        if (!questionOverlay) return;
+
+        const cityEl = questionOverlay.querySelector('#cityName');
+        if (cityEl) cityEl.textContent = city;
+
+        questionOverlay.style.display = 'block';
+    }
 
     // Set up socket handlers
     socket.on('joined', (data) => {
         myName = data.name;
         isFirstPlayer = data.isFirst;
 
-        // Hide join screen, show waiting screen
         const joinContainer = document.getElementById('joinScreen');
         if (joinContainer) {
             joinContainer.style.display = 'none';
@@ -33,7 +66,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     socket.on('player-list', (data) => {
-        // Check if we're still first (in case host left)
         const me = data.players.find(p => p.name === myName);
         if (me) {
             isFirstPlayer = me.isFirst;
@@ -45,16 +77,22 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.log('Game starting!');
         waitingScreen.hide();
 
-        // Show game screen with globe
         const gameScreen = document.getElementById('gameScreen');
         if (gameScreen) {
             gameScreen.style.display = 'block';
         }
 
-        // Initialize the globe
         globe = new EarthGlobe('renderCanvas');
         (window as unknown as { earthGlobe: EarthGlobe }).earthGlobe = globe;
+
+        createQuestionOverlay();
         console.log('Globe initialized');
+    });
+
+    // Handle question from server
+    socket.on('question', (data) => {
+        console.log(`Question: Where is ${data.city}?`);
+        showQuestion(data.city);
     });
 
     socket.on('error', (data) => {

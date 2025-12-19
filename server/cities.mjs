@@ -1,0 +1,237 @@
+/**
+ * 200 Famous Cities of the World
+ * Each city has name, country, and coordinates (lat, lon)
+ */
+
+export const cities = [
+    // Europe
+    { name: "London", country: "UK", lat: 51.5074, lon: -0.1278 },
+    { name: "Paris", country: "France", lat: 48.8566, lon: 2.3522 },
+    { name: "Rome", country: "Italy", lat: 41.9028, lon: 12.4964 },
+    { name: "Berlin", country: "Germany", lat: 52.5200, lon: 13.4050 },
+    { name: "Madrid", country: "Spain", lat: 40.4168, lon: -3.7038 },
+    { name: "Amsterdam", country: "Netherlands", lat: 52.3676, lon: 4.9041 },
+    { name: "Vienna", country: "Austria", lat: 48.2082, lon: 16.3738 },
+    { name: "Prague", country: "Czech Republic", lat: 50.0755, lon: 14.4378 },
+    { name: "Barcelona", country: "Spain", lat: 41.3851, lon: 2.1734 },
+    { name: "Munich", country: "Germany", lat: 48.1351, lon: 11.5820 },
+    { name: "Milan", country: "Italy", lat: 45.4642, lon: 9.1900 },
+    { name: "Stockholm", country: "Sweden", lat: 59.3293, lon: 18.0686 },
+    { name: "Copenhagen", country: "Denmark", lat: 55.6761, lon: 12.5683 },
+    { name: "Dublin", country: "Ireland", lat: 53.3498, lon: -6.2603 },
+    { name: "Brussels", country: "Belgium", lat: 50.8503, lon: 4.3517 },
+    { name: "Lisbon", country: "Portugal", lat: 38.7223, lon: -9.1393 },
+    { name: "Athens", country: "Greece", lat: 37.9838, lon: 23.7275 },
+    { name: "Budapest", country: "Hungary", lat: 47.4979, lon: 19.0402 },
+    { name: "Warsaw", country: "Poland", lat: 52.2297, lon: 21.0122 },
+    { name: "Oslo", country: "Norway", lat: 59.9139, lon: 10.7522 },
+    { name: "Helsinki", country: "Finland", lat: 60.1699, lon: 24.9384 },
+    { name: "Zurich", country: "Switzerland", lat: 47.3769, lon: 8.5417 },
+    { name: "Geneva", country: "Switzerland", lat: 46.2044, lon: 6.1432 },
+    { name: "Venice", country: "Italy", lat: 45.4408, lon: 12.3155 },
+    { name: "Florence", country: "Italy", lat: 43.7696, lon: 11.2558 },
+    { name: "Edinburgh", country: "UK", lat: 55.9533, lon: -3.1883 },
+    { name: "Reykjavik", country: "Iceland", lat: 64.1466, lon: -21.9426 },
+    { name: "Monaco", country: "Monaco", lat: 43.7384, lon: 7.4246 },
+    { name: "Krakow", country: "Poland", lat: 50.0647, lon: 19.9450 },
+    { name: "Istanbul", country: "Turkey", lat: 41.0082, lon: 28.9784 },
+
+    // Asia
+    { name: "Tokyo", country: "Japan", lat: 35.6762, lon: 139.6503 },
+    { name: "Beijing", country: "China", lat: 39.9042, lon: 116.4074 },
+    { name: "Shanghai", country: "China", lat: 31.2304, lon: 121.4737 },
+    { name: "Hong Kong", country: "China", lat: 22.3193, lon: 114.1694 },
+    { name: "Singapore", country: "Singapore", lat: 1.3521, lon: 103.8198 },
+    { name: "Seoul", country: "South Korea", lat: 37.5665, lon: 126.9780 },
+    { name: "Bangkok", country: "Thailand", lat: 13.7563, lon: 100.5018 },
+    { name: "Mumbai", country: "India", lat: 19.0760, lon: 72.8777 },
+    { name: "Delhi", country: "India", lat: 28.7041, lon: 77.1025 },
+    { name: "Dubai", country: "UAE", lat: 25.2048, lon: 55.2708 },
+    { name: "Kuala Lumpur", country: "Malaysia", lat: 3.1390, lon: 101.6869 },
+    { name: "Taipei", country: "Taiwan", lat: 25.0330, lon: 121.5654 },
+    { name: "Jakarta", country: "Indonesia", lat: -6.2088, lon: 106.8456 },
+    { name: "Manila", country: "Philippines", lat: 14.5995, lon: 120.9842 },
+    { name: "Hanoi", country: "Vietnam", lat: 21.0278, lon: 105.8342 },
+    { name: "Ho Chi Minh City", country: "Vietnam", lat: 10.8231, lon: 106.6297 },
+    { name: "Osaka", country: "Japan", lat: 34.6937, lon: 135.5023 },
+    { name: "Kyoto", country: "Japan", lat: 35.0116, lon: 135.7681 },
+    { name: "Bangalore", country: "India", lat: 12.9716, lon: 77.5946 },
+    { name: "Chennai", country: "India", lat: 13.0827, lon: 80.2707 },
+    { name: "Kolkata", country: "India", lat: 22.5726, lon: 88.3639 },
+    { name: "Shenzhen", country: "China", lat: 22.5431, lon: 114.0579 },
+    { name: "Guangzhou", country: "China", lat: 23.1291, lon: 113.2644 },
+    { name: "Chengdu", country: "China", lat: 30.5728, lon: 104.0668 },
+    { name: "Busan", country: "South Korea", lat: 35.1796, lon: 129.0756 },
+    { name: "Phuket", country: "Thailand", lat: 7.8804, lon: 98.3923 },
+    { name: "Bali", country: "Indonesia", lat: -8.3405, lon: 115.0920 },
+    { name: "Kathmandu", country: "Nepal", lat: 27.7172, lon: 85.3240 },
+    { name: "Colombo", country: "Sri Lanka", lat: 6.9271, lon: 79.8612 },
+    { name: "Maldives", country: "Maldives", lat: 3.2028, lon: 73.2207 },
+
+    // Middle East
+    { name: "Jerusalem", country: "Israel", lat: 31.7683, lon: 35.2137 },
+    { name: "Tel Aviv", country: "Israel", lat: 32.0853, lon: 34.7818 },
+    { name: "Doha", country: "Qatar", lat: 25.2854, lon: 51.5310 },
+    { name: "Abu Dhabi", country: "UAE", lat: 24.4539, lon: 54.3773 },
+    { name: "Riyadh", country: "Saudi Arabia", lat: 24.7136, lon: 46.6753 },
+    { name: "Muscat", country: "Oman", lat: 23.5880, lon: 58.3829 },
+    { name: "Amman", country: "Jordan", lat: 31.9454, lon: 35.9284 },
+    { name: "Beirut", country: "Lebanon", lat: 33.8938, lon: 35.5018 },
+    { name: "Tehran", country: "Iran", lat: 35.6892, lon: 51.3890 },
+
+    // Africa
+    { name: "Cairo", country: "Egypt", lat: 30.0444, lon: 31.2357 },
+    { name: "Cape Town", country: "South Africa", lat: -33.9249, lon: 18.4241 },
+    { name: "Johannesburg", country: "South Africa", lat: -26.2041, lon: 28.0473 },
+    { name: "Marrakech", country: "Morocco", lat: 31.6295, lon: -7.9811 },
+    { name: "Casablanca", country: "Morocco", lat: 33.5731, lon: -7.5898 },
+    { name: "Nairobi", country: "Kenya", lat: -1.2921, lon: 36.8219 },
+    { name: "Lagos", country: "Nigeria", lat: 6.5244, lon: 3.3792 },
+    { name: "Accra", country: "Ghana", lat: 5.6037, lon: -0.1870 },
+    { name: "Addis Ababa", country: "Ethiopia", lat: 8.9806, lon: 38.7578 },
+    { name: "Tunis", country: "Tunisia", lat: 36.8065, lon: 10.1815 },
+    { name: "Algiers", country: "Algeria", lat: 36.7538, lon: 3.0588 },
+    { name: "Dakar", country: "Senegal", lat: 14.7167, lon: -17.4677 },
+    { name: "Zanzibar", country: "Tanzania", lat: -6.1659, lon: 39.2026 },
+    { name: "Victoria Falls", country: "Zimbabwe", lat: -17.9243, lon: 25.8572 },
+    { name: "Luxor", country: "Egypt", lat: 25.6872, lon: 32.6396 },
+
+    // North America
+    { name: "New York", country: "USA", lat: 40.7128, lon: -74.0060 },
+    { name: "Los Angeles", country: "USA", lat: 34.0522, lon: -118.2437 },
+    { name: "Chicago", country: "USA", lat: 41.8781, lon: -87.6298 },
+    { name: "San Francisco", country: "USA", lat: 37.7749, lon: -122.4194 },
+    { name: "Las Vegas", country: "USA", lat: 36.1699, lon: -115.1398 },
+    { name: "Miami", country: "USA", lat: 25.7617, lon: -80.1918 },
+    { name: "Washington D.C.", country: "USA", lat: 38.9072, lon: -77.0369 },
+    { name: "Boston", country: "USA", lat: 42.3601, lon: -71.0589 },
+    { name: "Seattle", country: "USA", lat: 47.6062, lon: -122.3321 },
+    { name: "Denver", country: "USA", lat: 39.7392, lon: -104.9903 },
+    { name: "Nashville", country: "USA", lat: 36.1627, lon: -86.7816 },
+    { name: "New Orleans", country: "USA", lat: 29.9511, lon: -90.0715 },
+    { name: "Austin", country: "USA", lat: 30.2672, lon: -97.7431 },
+    { name: "San Diego", country: "USA", lat: 32.7157, lon: -117.1611 },
+    { name: "Philadelphia", country: "USA", lat: 39.9526, lon: -75.1652 },
+    { name: "Phoenix", country: "USA", lat: 33.4484, lon: -112.0740 },
+    { name: "Dallas", country: "USA", lat: 32.7767, lon: -96.7970 },
+    { name: "Houston", country: "USA", lat: 29.7604, lon: -95.3698 },
+    { name: "Atlanta", country: "USA", lat: 33.7490, lon: -84.3880 },
+    { name: "Orlando", country: "USA", lat: 28.5383, lon: -81.3792 },
+    { name: "Honolulu", country: "USA", lat: 21.3069, lon: -157.8583 },
+    { name: "Toronto", country: "Canada", lat: 43.6532, lon: -79.3832 },
+    { name: "Vancouver", country: "Canada", lat: 49.2827, lon: -123.1207 },
+    { name: "Montreal", country: "Canada", lat: 45.5017, lon: -73.5673 },
+    { name: "Mexico City", country: "Mexico", lat: 19.4326, lon: -99.1332 },
+    { name: "Cancun", country: "Mexico", lat: 21.1619, lon: -86.8515 },
+    { name: "Havana", country: "Cuba", lat: 23.1136, lon: -82.3666 },
+    { name: "Nassau", country: "Bahamas", lat: 25.0480, lon: -77.3554 },
+    { name: "San Juan", country: "Puerto Rico", lat: 18.4655, lon: -66.1057 },
+    { name: "Jamaica", country: "Jamaica", lat: 18.1096, lon: -77.2975 },
+
+    // South America
+    { name: "Rio de Janeiro", country: "Brazil", lat: -22.9068, lon: -43.1729 },
+    { name: "Sao Paulo", country: "Brazil", lat: -23.5505, lon: -46.6333 },
+    { name: "Buenos Aires", country: "Argentina", lat: -34.6037, lon: -58.3816 },
+    { name: "Lima", country: "Peru", lat: -12.0464, lon: -77.0428 },
+    { name: "Bogota", country: "Colombia", lat: 4.7110, lon: -74.0721 },
+    { name: "Santiago", country: "Chile", lat: -33.4489, lon: -70.6693 },
+    { name: "Cusco", country: "Peru", lat: -13.5319, lon: -71.9675 },
+    { name: "Machu Picchu", country: "Peru", lat: -13.1631, lon: -72.5450 },
+    { name: "Cartagena", country: "Colombia", lat: 10.3910, lon: -75.4794 },
+    { name: "Medellin", country: "Colombia", lat: 6.2476, lon: -75.5658 },
+    { name: "Quito", country: "Ecuador", lat: -0.1807, lon: -78.4678 },
+    { name: "Montevideo", country: "Uruguay", lat: -34.9011, lon: -56.1645 },
+    { name: "La Paz", country: "Bolivia", lat: -16.4897, lon: -68.1193 },
+    { name: "Galapagos Islands", country: "Ecuador", lat: -0.9538, lon: -90.9656 },
+
+    // Oceania
+    { name: "Sydney", country: "Australia", lat: -33.8688, lon: 151.2093 },
+    { name: "Melbourne", country: "Australia", lat: -37.8136, lon: 144.9631 },
+    { name: "Brisbane", country: "Australia", lat: -27.4698, lon: 153.0251 },
+    { name: "Perth", country: "Australia", lat: -31.9505, lon: 115.8605 },
+    { name: "Auckland", country: "New Zealand", lat: -36.8509, lon: 174.7645 },
+    { name: "Wellington", country: "New Zealand", lat: -41.2865, lon: 174.7762 },
+    { name: "Queenstown", country: "New Zealand", lat: -45.0312, lon: 168.6626 },
+    { name: "Fiji", country: "Fiji", lat: -17.7134, lon: 178.0650 },
+    { name: "Tahiti", country: "French Polynesia", lat: -17.6509, lon: -149.4260 },
+    { name: "Gold Coast", country: "Australia", lat: -28.0167, lon: 153.4000 },
+
+    // Russia & Central Asia
+    { name: "Moscow", country: "Russia", lat: 55.7558, lon: 37.6173 },
+    { name: "St. Petersburg", country: "Russia", lat: 59.9311, lon: 30.3609 },
+    { name: "Almaty", country: "Kazakhstan", lat: 43.2220, lon: 76.8512 },
+    { name: "Tashkent", country: "Uzbekistan", lat: 41.2995, lon: 69.2401 },
+    { name: "Samarkand", country: "Uzbekistan", lat: 39.6270, lon: 66.9750 },
+    { name: "Tbilisi", country: "Georgia", lat: 41.7151, lon: 44.8271 },
+    { name: "Baku", country: "Azerbaijan", lat: 40.4093, lon: 49.8671 },
+    { name: "Yerevan", country: "Armenia", lat: 40.1792, lon: 44.4991 },
+
+    // More European cities
+    { name: "Nice", country: "France", lat: 43.7102, lon: 7.2620 },
+    { name: "Cannes", country: "France", lat: 43.5528, lon: 7.0174 },
+    { name: "Lyon", country: "France", lat: 45.7640, lon: 4.8357 },
+    { name: "Marseille", country: "France", lat: 43.2965, lon: 5.3698 },
+    { name: "Bordeaux", country: "France", lat: 44.8378, lon: -0.5792 },
+    { name: "Frankfurt", country: "Germany", lat: 50.1109, lon: 8.6821 },
+    { name: "Hamburg", country: "Germany", lat: 53.5511, lon: 9.9937 },
+    { name: "Cologne", country: "Germany", lat: 50.9375, lon: 6.9603 },
+    { name: "Naples", country: "Italy", lat: 40.8518, lon: 14.2681 },
+    { name: "Seville", country: "Spain", lat: 37.3891, lon: -5.9845 },
+    { name: "Valencia", country: "Spain", lat: 39.4699, lon: -0.3763 },
+    { name: "Porto", country: "Portugal", lat: 41.1579, lon: -8.6291 },
+    { name: "Bruges", country: "Belgium", lat: 51.2093, lon: 3.2247 },
+    { name: "Salzburg", country: "Austria", lat: 47.8095, lon: 13.0550 },
+    { name: "Innsbruck", country: "Austria", lat: 47.2692, lon: 11.4041 },
+    { name: "Dubrovnik", country: "Croatia", lat: 42.6507, lon: 18.0944 },
+    { name: "Split", country: "Croatia", lat: 43.5081, lon: 16.4402 },
+    { name: "Ljubljana", country: "Slovenia", lat: 46.0569, lon: 14.5058 },
+    { name: "Bratislava", country: "Slovakia", lat: 48.1486, lon: 17.1077 },
+    { name: "Bucharest", country: "Romania", lat: 44.4268, lon: 26.1025 },
+    { name: "Sofia", country: "Bulgaria", lat: 42.6977, lon: 23.3219 },
+    { name: "Belgrade", country: "Serbia", lat: 44.7866, lon: 20.4489 },
+    { name: "Santorini", country: "Greece", lat: 36.3932, lon: 25.4615 },
+    { name: "Mykonos", country: "Greece", lat: 37.4467, lon: 25.3289 },
+
+    // More Asian cities
+    { name: "Macau", country: "China", lat: 22.1987, lon: 113.5439 },
+    { name: "Xi'an", country: "China", lat: 34.3416, lon: 108.9398 },
+    { name: "Hangzhou", country: "China", lat: 30.2741, lon: 120.1551 },
+    { name: "Nanjing", country: "China", lat: 32.0603, lon: 118.7969 },
+    { name: "Siem Reap", country: "Cambodia", lat: 13.3671, lon: 103.8448 },
+    { name: "Luang Prabang", country: "Laos", lat: 19.8830, lon: 102.1347 },
+    { name: "Yangon", country: "Myanmar", lat: 16.8661, lon: 96.1951 },
+    { name: "Jaipur", country: "India", lat: 26.9124, lon: 75.7873 },
+    { name: "Agra", country: "India", lat: 27.1767, lon: 78.0081 },
+    { name: "Varanasi", country: "India", lat: 25.3176, lon: 82.9739 },
+    { name: "Goa", country: "India", lat: 15.2993, lon: 74.1240 },
+
+    // Famous landmarks/places
+    { name: "Great Wall of China", country: "China", lat: 40.4319, lon: 116.5704 },
+    { name: "Petra", country: "Jordan", lat: 30.3285, lon: 35.4444 },
+    { name: "Angkor Wat", country: "Cambodia", lat: 13.4125, lon: 103.8670 },
+    { name: "Pyramids of Giza", country: "Egypt", lat: 29.9792, lon: 31.1342 },
+    { name: "Niagara Falls", country: "Canada", lat: 43.0962, lon: -79.0377 },
+    { name: "Grand Canyon", country: "USA", lat: 36.1069, lon: -112.1129 },
+    { name: "Mount Everest", country: "Nepal", lat: 27.9881, lon: 86.9250 },
+    { name: "Mount Fuji", country: "Japan", lat: 35.3606, lon: 138.7274 },
+    { name: "Uluru", country: "Australia", lat: -25.3444, lon: 131.0369 },
+    { name: "Christ the Redeemer", country: "Brazil", lat: -22.9519, lon: -43.2105 },
+];
+
+// Get a random city
+export function getRandomCity() {
+    return cities[Math.floor(Math.random() * cities.length)];
+}
+
+// Calculate distance between two points in km (Haversine formula)
+export function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c);
+}

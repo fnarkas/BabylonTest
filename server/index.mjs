@@ -9,6 +9,7 @@
 
 import { WebSocketServer } from 'ws';
 import os from 'os';
+import { getRandomCity } from './cities.mjs';
 
 const PORT = 3003;
 const WEB_PORT = 3000; // Vite server port
@@ -18,7 +19,6 @@ function getLocalIP() {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {
-            // Skip internal (loopback) and non-IPv4 addresses
             if (iface.family === 'IPv4' && !iface.internal) {
                 return iface.address;
             }
@@ -26,17 +26,19 @@ function getLocalIP() {
     }
     return 'localhost';
 }
+
 const wss = new WebSocketServer({ port: PORT, host: '0.0.0.0' });
 
 // Game state
 const players = [];
-const hosts = new Set(); // Host connections (observers)
+const hosts = new Set();
 let gameStarted = false;
+let currentCity = null;
 
 function broadcast(message) {
     const data = JSON.stringify(message);
     wss.clients.forEach(client => {
-        if (client.readyState === 1) { // WebSocket.OPEN
+        if (client.readyState === 1) {
             client.send(data);
         }
     });
@@ -47,6 +49,17 @@ function getPlayerList() {
         name: p.name,
         isFirst: p.isFirst
     }));
+}
+
+function startNewRound() {
+    currentCity = getRandomCity();
+    console.log(`New round: ${currentCity.name}, ${currentCity.country}`);
+
+    broadcast({
+        type: 'question',
+        city: currentCity.name,
+        country: currentCity.country
+    });
 }
 
 wss.on('connection', (ws) => {
@@ -65,7 +78,6 @@ wss.on('connection', (ws) => {
                     hosts.add(ws);
                     const localIP = getLocalIP();
                     console.log('Host connected, local IP:', localIP);
-                    // Send host info including local IP for QR code
                     ws.send(JSON.stringify({
                         type: 'host-info',
                         localIP,
@@ -76,7 +88,6 @@ wss.on('connection', (ws) => {
                 }
 
                 case 'join': {
-                    // Check if name already taken
                     if (players.some(p => p.name === message.name)) {
                         ws.send(JSON.stringify({
                             type: 'error',
@@ -85,18 +96,12 @@ wss.on('connection', (ws) => {
                         return;
                     }
 
-                    // Add player
                     const isFirst = players.length === 0;
                     playerName = message.name;
-                    players.push({
-                        name: playerName,
-                        isFirst,
-                        ws
-                    });
+                    players.push({ name: playerName, isFirst, ws });
 
                     console.log(`Player joined: ${playerName} (isFirst: ${isFirst})`);
 
-                    // Send confirmation to joining player
                     ws.send(JSON.stringify({
                         type: 'joined',
                         name: playerName,
@@ -104,7 +109,6 @@ wss.on('connection', (ws) => {
                         players: getPlayerList()
                     }));
 
-                    // Broadcast updated player list to all
                     broadcast({
                         type: 'player-list',
                         players: getPlayerList()
@@ -113,12 +117,14 @@ wss.on('connection', (ws) => {
                 }
 
                 case 'start-game': {
-                    // Only first player can start
                     const player = players.find(p => p.name === playerName);
                     if (player && player.isFirst) {
                         gameStarted = true;
                         console.log('Game started!');
                         broadcast({ type: 'game-start' });
+
+                        // Start first round after short delay
+                        setTimeout(() => startNewRound(), 2000);
                     }
                     break;
                 }
@@ -138,13 +144,11 @@ wss.on('connection', (ws) => {
                 players.splice(index, 1);
                 console.log(`Player left: ${playerName}`);
 
-                // If first player left, assign new first player
                 if (players.length > 0 && !players.some(p => p.isFirst)) {
                     players[0].isFirst = true;
                     console.log(`New host: ${players[0].name}`);
                 }
 
-                // Broadcast updated player list
                 broadcast({
                     type: 'player-list',
                     players: getPlayerList()
